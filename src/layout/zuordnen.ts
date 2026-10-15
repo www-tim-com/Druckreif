@@ -87,6 +87,7 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
   const zuordnung = new Map<string, number>()
   const ausblenden: HTMLElement[] = []
   if (layout.settings.fontSizePt) wurzel.style.fontSize = `${layout.settings.fontSizePt}pt`
+  if (layout.settings.lineHeight) wurzel.style.lineHeight = String(layout.settings.lineHeight)
 
   layout.items.forEach((eintrag, i) => {
     const treffer = blockFinden(eintrag.anchor, bloecke)
@@ -146,6 +147,18 @@ function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
   if (e.pageBreakBefore === false) ziel.classList.add('kein-umbruch-vor')
   if (e.spaceBeforeMm !== undefined) el.style.marginTop = `${e.spaceBeforeMm}mm`
   if (e.spaceAfterMm !== undefined) el.style.marginBottom = `${e.spaceAfterMm}mm`
+  if (e.fontSizePt !== undefined) el.style.fontSize = `${e.fontSizePt}pt`
+  if (e.lineHeight !== undefined) el.style.lineHeight = String(e.lineHeight)
+
+  const tabelle = e.table
+  if (tabelle && el.tagName === 'TABLE') {
+    if (tabelle.widthPct !== undefined) el.style.width = `${tabelle.widthPct}%`
+    if (tabelle.align) el.dataset.ausrichtung = tabelle.align
+    if (tabelle.columnsPct) spaltenSetzen(el as HTMLTableElement, tabelle.columnsPct)
+    if (tabelle.fontSizePt !== undefined) el.style.fontSize = `${tabelle.fontSizePt}pt`
+    if (tabelle.compact) el.classList.add('kompakt')
+    if (tabelle.split) el.classList.add('teilbar')
+  }
 
   const bild = e.image
   if (bild) {
@@ -158,4 +171,17 @@ function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
     if (bild.wrap) el.classList.add('umfliessen')
     if (bild.offsetYMm !== undefined) el.style.marginTop = `${bild.offsetYMm}mm`
   }
+}
+
+/** Feste Spaltenbreiten (in % der Tabellenbreite) über ein colgroup setzen – auch live beim Ziehen. */
+export function spaltenSetzen(tabelle: HTMLTableElement, prozent: number[]): void {
+  tabelle.querySelector(':scope > colgroup')?.remove()
+  const gruppe = tabelle.ownerDocument.createElement('colgroup')
+  for (const p of prozent) {
+    const col = tabelle.ownerDocument.createElement('col')
+    col.style.width = `${p}%`
+    gruppe.append(col)
+  }
+  tabelle.prepend(gruppe)
+  tabelle.style.tableLayout = 'fixed'
 }

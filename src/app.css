@@ -195,18 +195,12 @@ button:disabled { cursor: default; opacity: 0.4; }
 }
 .seitenleiste button.notiz:hover { background: var(--flaeche); }
 .seitenleiste button.notiz.aktiv { background: var(--word-blau-hell); }
-.seitenleiste button.dazu { visibility: hidden; border: none; background: none; padding: 0 6px; color: var(--word-blau); font-weight: 700; font-size: 15px; }
+.seitenleiste button.dazu { visibility: hidden; border: none; background: none; padding: 2px 6px; color: var(--word-blau); display: grid; border-radius: 3px; }
+.seitenleiste button.dazu:hover { background: var(--word-blau-hell); }
+.seitenleiste .in-mappe { color: var(--word-blau); flex: none; }
 .seitenleiste .notiz-zeile:hover button.dazu { visibility: visible; }
 .reihenfolge-symbol { color: var(--leise); }
 
-.druckliste { border: 1px solid var(--rahmen); border-radius: 4px; padding: 6px 8px; background: #faf9f8; }
-.druckliste h2 { font-size: 11px; margin: 0 0 4px; color: var(--leise); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-.druckliste ol { margin: 0; padding-left: 0; list-style: none; }
-.druckliste li { display: flex; align-items: center; gap: 2px; }
-.druckliste .nummer { color: var(--leise); margin-right: 4px; font-size: 12px; }
-.druckliste .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.druckliste button { padding: 0 5px; border: none; background: none; color: var(--leise); }
-.druckliste button:hover:not(:disabled) { color: var(--word-blau); }
 
 .gliederung { list-style: none; margin: 0; padding: 8px 6px; overflow: auto; flex: 1; }
 .gliederung li { display: flex; align-items: center; border-radius: 3px; }
@@ -236,12 +230,98 @@ button:disabled { cursor: default; opacity: 0.4; }
 .hinweis .aktionen button { display: flex; align-items: center; gap: 4px; border: 1px solid #c8c6c4; background: white; border-radius: 3px; padding: 1px 8px; font-size: 12px; }
 .hinweis .aktionen button:hover { border-color: var(--word-blau); }
 
+/* ---- Mappe ---- */
+
+.mappe { list-style: none; margin: 0; padding: 8px 8px 12px; overflow: auto; flex: 1; }
+.mappe > li { border-radius: 4px; margin-bottom: 2px; transition: background 0.1s; }
+.mappe > li.wird-gezogen { opacity: 0.4; }
+.mappe > li.ziel { box-shadow: inset 0 2px 0 var(--word-blau); }
+.mappe-zeile { display: flex; align-items: center; gap: 2px; padding: 2px 4px; border-radius: 4px; }
+.mappe-zeile:hover { background: var(--flaeche); }
+.mappe-zeile .griff { color: #a19f9d; cursor: grab; flex: none; }
+.mappe-zeile button { border: none; background: none; padding: 3px; border-radius: 3px; display: grid; color: var(--leise); }
+.mappe-zeile button:hover:not(:disabled) { background: #e1dfdd; color: var(--word-blau); }
+.mappe-zeile .name { flex: 1; min-width: 0; display: block; text-align: left; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 4px; }
+.mappe-zeile .nummer { color: var(--leise); font-size: 12px; }
+.mappe-zeile .markierung { margin-left: 6px; font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--word-blau-hell); color: var(--word-blau); }
+.mappe-zeile .seite.an { color: var(--word-blau); }
+.mappe-zeile .entfernen { visibility: hidden; }
+.mappe-zeile:hover .entfernen { visibility: visible; }
+.abschnittswahl { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 8px 46px; font-size: 12px; }
+.abschnittswahl label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.abschnittswahl .alle { font-weight: 600; margin-bottom: 2px; }
+.abschnittswahl input { accent-color: var(--word-blau); margin: 0; }
+.mappe-leer, .mappe-hinweis { color: var(--leise); padding: 12px; margin: 0; }
+.mappe-hinweis { padding: 2px 8px 8px 46px; font-size: 12px; }
+
+/* Reiter der offenen Mappen über den Seiten */
+.mappenreiter {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 6px 8px 0;
+  background: #e6e6e6;
+  border-bottom: 1px solid var(--rahmen);
+  overflow-x: auto;
+  flex: none;
+}
+.mappenreiter-reiter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 5px 6px 5px 10px;
+  border-radius: 6px 6px 0 0;
+  background: #d9d9d9;
+  color: var(--leise);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.mappenreiter-reiter:hover { background: #ececec; }
+.mappenreiter-reiter.aktiv { background: white; color: var(--text); }
+.mappenreiter-reiter.aktiv { box-shadow: inset 0 2px 0 var(--word-blau); }
+.mappenreiter-reiter svg { flex: none; color: var(--word-blau); }
+.mappenreiter-reiter .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mappenreiter-reiter input { font: inherit; width: 140px; border: 1px solid var(--word-blau); border-radius: 2px; padding: 0 4px; }
+.mappenreiter-reiter .zu { border: none; background: none; padding: 2px; border-radius: 3px; display: grid; color: var(--leise); opacity: 0; }
+.mappenreiter-reiter:hover .zu, .mappenreiter-reiter.aktiv .zu { opacity: 1; }
+.mappenreiter-reiter .zu:hover { background: #e1dfdd; }
+.mappenreiter-neu { border: none; background: none; padding: 5px 8px; border-radius: 4px; color: var(--leise); display: grid; margin-bottom: 2px; }
+.mappenreiter-neu:hover { background: #d9d9d9; color: var(--word-blau); }
+
 /* ---- Dokumentbereich ---- */
 
 .dokumentbereich { grid-area: dok; position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #e6e6e6; }
 .vorschau { position: relative; flex: 1; min-height: 0; }
-.vorschau iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
-.vorschau iframe.wartet { visibility: hidden; }
+.vorschau iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #e6e6e6; transition: opacity 0.15s ease-out; }
+.vorschau iframe.aktiv { z-index: 1; }
+/* Die wartende Fassung wird unsichtbar umbrochen und dann sanft eingeblendet */
+.vorschau iframe.wartet { opacity: 0; pointer-events: none; z-index: 0; }
+
+/* Ladebalken oben am Dokument, wie in Office */
+.ladebalken {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(43, 87, 154, 0.15);
+}
+.ladebalken::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--word-blau);
+  animation: laden 1s ease-in-out infinite;
+}
+@keyframes laden {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
 .leer-hinweis { margin: auto; color: var(--leise); font-size: 14px; }
 .fehlerleiste { padding: 6px 12px; background: #fde7e9; color: var(--rot); border-bottom: 1px solid #f1bbbc; }
 
@@ -315,3 +395,14 @@ button:disabled { cursor: default; opacity: 0.4; }
 .datei dt { color: var(--leise); }
 .datei dd { margin: 0; }
 .datei .fehler { color: var(--rot); }
+.mappenliste { list-style: none; margin: 0; padding: 0; max-width: 560px; }
+.mappenliste li { display: flex; align-items: center; border-bottom: 1px solid #edebe9; }
+.mappenliste .oeffnen { flex: 1; display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 9px 8px; text-align: left; }
+.mappenliste .oeffnen:hover { background: var(--word-blau-hover); }
+.mappenliste .oeffnen svg { color: var(--word-blau); }
+.mappenliste .oeffnen span { color: var(--leise); margin-left: auto; font-size: 12px; }
+.mappenliste .loeschen { border: none; background: none; padding: 8px; color: var(--leise); display: grid; }
+.mappenliste .loeschen:hover { color: var(--rot); }
+
+/* Etwas weichere Übergänge, wie in Office */
+.band-gross, .band-klein, .band-symbol, .reiter button, .kachel, .gliederung li, .seitenleiste button.notiz { transition: background-color 0.1s, border-color 0.1s; }

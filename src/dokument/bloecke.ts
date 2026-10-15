@@ -90,6 +90,10 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     el.setAttribute('data-block', id)
     bloecke.push({ id, pfad: blockPfad, typ, index, hash: bildname ?? pruefsumme(text), bild: bildname, text })
   }
+  // Export-Anweisung: „Ein Kapitel ohne ###-Abschnitte behandelst du als Ganzes wie einen Abschnitt.“
+  for (const kapitel of wurzel.querySelectorAll('section.kapitel')) {
+    if (!kapitel.querySelector(':scope > section.abschnitt')) kapitel.classList.add('am-stueck')
+  }
   return { titel, bloecke, weitereTitel }
 }
 

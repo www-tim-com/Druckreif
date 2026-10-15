@@ -35,6 +35,7 @@ export function demoVault(): Vault {
     lesenText: async (pfad) => geschrieben.get(pfad)?.text ?? (await laden(pfad)).text(),
     lesenBlob: async (pfad) => (await laden(pfad)).blob(),
     geaendertAm: async (pfad) => geschrieben.get(pfad)?.zeit ?? 0,
+    aktualisieren: async () => {}, // Demo-Dateien ändern sich nicht
     async schreibenText(pfad, text) {
       geschrieben.set(pfad, { text, zeit: Date.now() })
       if (!vault.dateien.includes(pfad)) vault.dateien = [...vault.dateien, pfad].sort()

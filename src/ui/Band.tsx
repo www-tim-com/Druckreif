@@ -54,6 +54,8 @@ interface ZahlProps {
   wert: number | undefined
   /** angezeigt, wenn kein eigener Wert gesetzt ist */
   platzhalter?: string
+  /** Ausgangswert für die Pfeile, wenn kein eigener Wert gesetzt ist (sonst der Platzhalter als Zahl) */
+  start?: number
   einheit: string
   schritt: number
   min: number
@@ -63,7 +65,7 @@ interface ZahlProps {
 }
 
 /** Zahlenfeld wie in Word: Pfeile ändern sofort, getippte Werte gelten bei Enter oder beim Verlassen. Leer = automatisch. */
-export function Zahlfeld({ beschriftung, wert, platzhalter, einheit, schritt, min, max, gesperrt, onWert }: ZahlProps) {
+export function Zahlfeld({ beschriftung, wert, platzhalter, start, einheit, schritt, min, max, gesperrt, onWert }: ZahlProps) {
   const [text, setText] = useState(format(wert))
   useEffect(() => setText(format(wert)), [wert])
 
@@ -75,7 +77,9 @@ export function Zahlfeld({ beschriftung, wert, platzhalter, einheit, schritt, mi
     else if (Number.isFinite(z)) onWert(begrenzen(z))
     else setText(format(wert))
   }
-  const basis = wert ?? Number(platzhalter?.replace(',', '.')) ?? 0
+  const ausPlatzhalter = Number(platzhalter?.replace(',', '.'))
+  const basisRoh = wert ?? start ?? (Number.isFinite(ausPlatzhalter) ? ausPlatzhalter : 0)
+  const basis = Number.isFinite(basisRoh) ? basisRoh : 0
 
   return (
     <label className="band-zahl">
@@ -91,10 +95,10 @@ export function Zahlfeld({ beschriftung, wert, platzhalter, einheit, schritt, mi
         />
         <span className="einheit">{einheit}</span>
         <span className="pfeile">
-          <button disabled={gesperrt} onClick={() => onWert(begrenzen((Number.isFinite(basis) ? basis : 0) + schritt))} tabIndex={-1} aria-label="mehr">
+          <button disabled={gesperrt} onClick={() => onWert(begrenzen(basis + schritt))} tabIndex={-1} aria-label="mehr">
             <ChevronUp size={10} />
           </button>
-          <button disabled={gesperrt} onClick={() => onWert(begrenzen((Number.isFinite(basis) ? basis : 0) - schritt))} tabIndex={-1} aria-label="weniger">
+          <button disabled={gesperrt} onClick={() => onWert(begrenzen(basis - schritt))} tabIndex={-1} aria-label="weniger">
             <ChevronDown size={10} />
           </button>
         </span>

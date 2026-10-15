@@ -20,7 +20,8 @@ Grundlage: Spezifikation „Lernzettel-Editor“ und die „PDF-Export-Anweisung
 
 `vault/` (Dateien) → `markdown/` (Markdown → Obsidian-HTML) → `dokument/bloecke.ts` (gliedern, Fingerabdrücke)
 → `layout/zuordnen.ts` (Layout-Datei anwenden) → `vorschau/Vorschau.tsx` (iframe + Paged.js).
-`dokument/aufbauen.ts` steuert den Ablauf, `App.tsx` hält Zustand (Auswahl, Rückgängig-Verlauf) und verdrahtet die
+Was gedruckt wird, bestimmt die aktive **Mappe** (`mappen/mappen.ts`, `.lernzettel/mappen.json`): Notizen in
+Reihenfolge, je mit `newPage` und optional `sections` (Auszug). `dokument/aufbauen.ts` steuert den Ablauf, `App.tsx` hält Zustand (Auswahl, Rückgängig-Verlauf) und verdrahtet die
 Word-Oberfläche in `ui/`. Bedienung auf den Seiten (Klick, Rechtsklick, Bild ziehen) steckt in `vorschau/interaktion.ts`
 und meldet nur Absichten an die App; jede Layout-Änderung läuft über die reinen Funktionen in `layout/bearbeiten.ts`.
 
@@ -34,6 +35,10 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   (kein Flackern). Block-IDs (`n0-12`) sind nur innerhalb einer Fassung gültig, Layout hängt am Fingerabdruck.
 - Ausblenden darf nie Inhalt stillschweigend entfernen: jeder ausgeblendete Block erzeugt einen Hinweis mit „Einblenden“.
   Fußnoten gehören zur Notiz, nicht zum letzten Abschnitt (`bloecke.ts`).
+- Der erste Umbruch läuft ebenfalls im unsichtbaren iframe (sonst kurz roher, seitenbreiter Text sichtbar).
+- `Vault.aktualisieren()` liest die Dateiliste neu; `bilderVergessen()` verwirft die Blob-URLs (verzögert freigeben,
+  die sichtbare Fassung nutzt sie noch).
+- Tabellen-Griffe liegen in einer Ebene direkt im body (`.druckreif-ueberlagerung`), nie innerhalb der Tabelle.
 - Die Polyfill-Datei von Paged.js ist nicht über `exports` freigegeben → Import über `/node_modules/...?url`.
 
 ## Prüfen

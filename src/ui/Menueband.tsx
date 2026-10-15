@@ -2,6 +2,7 @@
 // Das Band kennt keine Logik: Es zeigt den Zustand an und ruft die Befehle der App auf.
 
 import {
+  ALargeSmall,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -18,9 +19,12 @@ import {
   Plus,
   Printer,
   Redo2,
+  RefreshCw,
   RotateCcw,
+  Rows3,
   SeparatorHorizontal,
   Sparkles,
+  Table,
   Undo2,
   WrapText,
 } from 'lucide-react'
@@ -30,11 +34,17 @@ import {
   ausblendenSetzen,
   bildSetzen,
   eintragZuruecksetzen,
+  tabelleSetzen,
   umbruchSetzen,
 } from '../layout/bearbeiten'
 import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld } from './Band'
 
-export type Reiter = 'start' | 'layout' | 'ansicht' | 'bild'
+export type Reiter = 'start' | 'layout' | 'ansicht' | 'bild' | 'tabelle'
+
+export interface Schrift {
+  fontSizePt?: number
+  lineHeight?: number
+}
 
 export interface GewaehlterBlock {
   typ: string
@@ -53,13 +63,20 @@ export interface BandProps {
   vor(): void
   drucken(): void
 
+  aktualisieren(): void
+
+  /** Schrift der Auswahl (gewählter Block, sonst die ganze Notiz) */
+  auswahlSchrift: Schrift & { fuer: string } | null
+  onAuswahlSchrift(teil: Schrift): void
   notizName: string | null
-  schriftPt: number | undefined
-  onSchrift(pt: number | undefined): void
+  notizSchrift: Schrift
+  onNotizSchrift(teil: Schrift): void
   notizHatLayout: boolean
   notizZuruecksetzen(): void
 
   block: GewaehlterBlock | null
+  /** gemessene Breite des gewählten Bildes in mm (Startwert für die Pfeile) */
+  bildIstMm: number | null
   blockAendern(aendern: (e: LayoutEintrag) => LayoutEintrag): void
 
   zoom: number
@@ -73,14 +90,16 @@ export interface BandProps {
 }
 
 export function Menueband(p: BandProps) {
-  const istBild = p.block?.typ === 'image'
+  const kontext = p.block?.typ === 'image' ? 'bild' : p.block?.typ === 'table' ? 'tabelle' : null
   const reiter: { id: Reiter; text: string }[] = [
     { id: 'start', text: 'Start' },
     { id: 'layout', text: 'Layout' },
     { id: 'ansicht', text: 'Ansicht' },
   ]
-  if (istBild) reiter.push({ id: 'bild', text: 'Bildformat' })
-  const aktuell = p.reiter === 'bild' && !istBild ? 'start' : p.reiter
+  if (kontext === 'bild') reiter.push({ id: 'bild', text: 'Bildformat' })
+  if (kontext === 'tabelle') reiter.push({ id: 'tabelle', text: 'Tabellenlayout' })
+  const istKontext = p.reiter === 'bild' || p.reiter === 'tabelle'
+  const aktuell = istKontext && p.reiter !== kontext ? 'start' : p.reiter
 
   return (
     <div className="menueband">
@@ -91,7 +110,7 @@ export function Menueband(p: BandProps) {
         {reiter.map((r) => (
           <button
             key={r.id}
-            className={`${r.id === aktuell ? 'gewaehlt' : ''}${r.id === 'bild' ? ' kontext' : ''}`}
+            className={`${r.id === aktuell ? 'gewaehlt' : ''}${r.id === kontext ? ' kontext' : ''}`}
             onClick={() => p.onReiter(r.id)}
           >
             {r.text}
@@ -103,6 +122,7 @@ export function Menueband(p: BandProps) {
         {aktuell === 'layout' && <LayoutReiter {...p} />}
         {aktuell === 'ansicht' && <AnsichtReiter {...p} />}
         {aktuell === 'bild' && <BildReiter {...p} />}
+        {aktuell === 'tabelle' && <TabellenReiter {...p} />}
       </div>
     </div>
   )
@@ -122,17 +142,28 @@ function StartReiter(p: BandProps) {
         <div className="spalte">
           <Zahlfeld
             beschriftung="Schriftgröße"
-            wert={p.schriftPt}
-            platzhalter="10,5"
+            wert={p.auswahlSchrift?.fontSizePt}
+            platzhalter={zahl(p.notizSchrift.fontSizePt ?? 10.5)}
             einheit="pt"
             schritt={0.5}
-            min={7}
-            max={16}
-            gesperrt={!p.notizName}
-            onWert={(pt) => p.onSchrift(pt === 10.5 ? undefined : pt)}
+            min={6}
+            max={24}
+            gesperrt={!p.auswahlSchrift}
+            onWert={(pt) => p.onAuswahlSchrift({ fontSizePt: pt })}
           />
-          <span className="band-info" title="Gilt für die ganze Notiz">
-            {p.notizName ? `für „${p.notizName}“` : 'keine Notiz'}
+          <Zahlfeld
+            beschriftung="Zeilenabstand"
+            wert={p.auswahlSchrift?.lineHeight}
+            platzhalter={zahl(p.notizSchrift.lineHeight ?? 1.35)}
+            einheit="×"
+            schritt={0.05}
+            min={0.9}
+            max={2.5}
+            gesperrt={!p.auswahlSchrift}
+            onWert={(z) => p.onAuswahlSchrift({ lineHeight: z })}
+          />
+          <span className="band-info" title="Ohne gewählten Block gilt die Einstellung für die ganze Notiz">
+            {p.auswahlSchrift ? `für ${p.auswahlSchrift.fuer}` : 'keine Notiz'}
           </span>
         </div>
       </Gruppe>
@@ -148,6 +179,7 @@ function StartReiter(p: BandProps) {
         />
       </Gruppe>
       <Gruppe titel="Ausgabe">
+        <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen: geänderte Notizen, neue oder verschobene Bilder, Theme (F5)" onClick={p.aktualisieren} />
         <GrosserKnopf symbol={Printer} text="Drucken / PDF" tipp="Drucken oder als PDF speichern (Strg+P)" onClick={p.drucken} />
       </Gruppe>
     </>
@@ -203,7 +235,13 @@ function LayoutReiter(p: BandProps) {
         </div>
       </Gruppe>
       <BlockGruppe {...p} />
-      <Gruppe titel="Notiz">
+      <Gruppe titel={p.notizName ? `Notiz „${kurz(p.notizName)}“` : 'Notiz'}>
+        <div className="spalte">
+          <Zahlfeld beschriftung="Grundschrift" wert={p.notizSchrift.fontSizePt} platzhalter="10,5" einheit="pt" schritt={0.5} min={7} max={16} gesperrt={!p.notizName}
+            onWert={(pt) => p.onNotizSchrift({ fontSizePt: pt === 10.5 ? undefined : pt })} />
+          <Zahlfeld beschriftung="Zeilenabstand" wert={p.notizSchrift.lineHeight} platzhalter="1,35" einheit="×" schritt={0.05} min={0.9} max={2.5} gesperrt={!p.notizName}
+            onWert={(z) => p.onNotizSchrift({ lineHeight: z === 1.35 ? undefined : z })} />
+        </div>
         <GrosserKnopf symbol={FileText} text="Layout zurücksetzen" gesperrt={!p.notizHatLayout} onClick={p.notizZuruecksetzen} tipp="Alle manuellen Änderungen dieser Notiz verwerfen" />
       </Gruppe>
     </>
@@ -217,6 +255,9 @@ function AnsichtReiter(p: BandProps) {
         <KleinerKnopf symbol={Minus} text="Verkleinern" onClick={() => p.onZoom(p.zoom - 0.1)} gesperrt={p.zoom <= 0.3} />
         <GrosserKnopf symbol={Maximize2} text="100 %" onClick={() => p.onZoom(1)} />
         <KleinerKnopf symbol={Plus} text="Vergrößern" onClick={() => p.onZoom(p.zoom + 0.1)} gesperrt={p.zoom >= 3} />
+      </Gruppe>
+      <Gruppe titel="Vault">
+        <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen (F5)" onClick={p.aktualisieren} />
       </Gruppe>
       <Gruppe titel="Anzeigen">
         <GrosserKnopf symbol={ListTree} text="Navigation" aktiv={p.nav} onClick={() => p.onNav(!p.nav)} />
@@ -235,7 +276,7 @@ function BildReiter(p: BandProps) {
     <>
       <Gruppe titel="Größe">
         <div className="spalte">
-          <Zahlfeld beschriftung="Breite" wert={bild?.widthMm} platzhalter="auto" einheit="mm" schritt={5} min={15} max={167} onWert={(mm) => setzen({ widthMm: mm })} />
+          <Zahlfeld beschriftung="Breite" wert={bild?.widthMm} platzhalter={p.bildIstMm ? String(p.bildIstMm) : 'auto'} start={p.bildIstMm ?? 80} einheit="mm" schritt={5} min={15} max={167} onWert={(mm) => setzen({ widthMm: mm })} />
           <KleinerKnopf symbol={Image} text="Originalgröße" gesperrt={bild?.widthMm === undefined} onClick={() => setzen({ widthMm: undefined })} />
         </div>
       </Gruppe>
@@ -261,4 +302,50 @@ function BildReiter(p: BandProps) {
       </Gruppe>
     </>
   )
+}
+
+function TabellenReiter(p: BandProps) {
+  const t = p.block?.eintrag?.table
+  const setzen = (teil: Parameters<typeof tabelleSetzen>[0]) => p.blockAendern(tabelleSetzen(teil))
+  const ausrichtung = t?.align ?? 'left'
+  return (
+    <>
+      <Gruppe titel="Größe">
+        <div className="spalte">
+          <Zahlfeld beschriftung="Breite" wert={t?.widthPct} platzhalter="100" einheit="%" schritt={5} min={20} max={100} onWert={(w) => setzen({ widthPct: w === 100 ? undefined : w })} />
+          <span className="band-info">Rechten Rand oder Spaltengrenze ziehen</span>
+        </div>
+      </Gruppe>
+      <Gruppe titel="Ausrichtung">
+        <div className="zeile">
+          <SymbolKnopf symbol={AlignLeft} text="Links" aktiv={ausrichtung === 'left'} onClick={() => setzen({ align: undefined })} />
+          <SymbolKnopf symbol={AlignCenter} text="Zentriert" aktiv={ausrichtung === 'center'} onClick={() => setzen({ align: 'center' })} />
+          <SymbolKnopf symbol={AlignRight} text="Rechts" aktiv={ausrichtung === 'right'} onClick={() => setzen({ align: 'right' })} />
+        </div>
+      </Gruppe>
+      <Gruppe titel="Spalten">
+        <GrosserKnopf symbol={Table} text="Automatisch" aktiv={!t?.columnsPct} gesperrt={!t?.columnsPct} onClick={() => setzen({ columnsPct: undefined })} tipp="Spaltenbreiten nach Inhalt (gezogene Breiten verwerfen)" />
+      </Gruppe>
+      <Gruppe titel="Schrift und Zeilen">
+        <div className="spalte">
+          <Zahlfeld beschriftung="Schriftgröße" wert={t?.fontSizePt} platzhalter={zahl(p.notizSchrift.fontSizePt ?? 10.5)} einheit="pt" schritt={0.5} min={6} max={16} onWert={(pt) => setzen({ fontSizePt: pt })} />
+          <KleinerKnopf symbol={Rows3} text="Kompakte Zeilen" aktiv={!!t?.compact} onClick={() => setzen({ compact: t?.compact ? undefined : true })} tipp="Weniger Innenabstand in den Zellen" />
+        </div>
+      </Gruppe>
+      <Gruppe titel="Seiten">
+        <GrosserKnopf symbol={ALargeSmall} text="Über Seiten teilen" aktiv={!!t?.split} onClick={() => setzen({ split: t?.split ? undefined : true })} tipp="Lange Tabelle darf auf der nächsten Seite weiterlaufen (sonst am Stück)" />
+      </Gruppe>
+      <Gruppe titel="Zurücksetzen">
+        <GrosserKnopf symbol={RotateCcw} text="Tabelle zurücksetzen" gesperrt={!t} onClick={() => setzen({ widthPct: undefined, align: undefined, columnsPct: undefined, fontSizePt: undefined, compact: undefined, split: undefined })} />
+      </Gruppe>
+    </>
+  )
+}
+
+function zahl(z: number): string {
+  return String(z).replace('.', ',')
+}
+
+function kurz(text: string, max = 18): string {
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
 }

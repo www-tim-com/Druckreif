@@ -1,6 +1,9 @@
 // Bedienung direkt auf den Seiten (im iframe der Vorschau), wie in Word:
-// Klick wählt einen Block, Rechtsklick öffnet das Kontextmenü, Bilder lassen sich ziehen und an den Ecken skalieren.
+// Klick wählt einen Block, Rechtsklick öffnet das Kontextmenü, Bilder lassen sich ziehen und an den Ecken skalieren,
+// bei Tabellen lassen sich Spaltengrenzen und der rechte Rand ziehen.
 // Während des Ziehens wird nur das DOM verändert; erst beim Loslassen geht die Änderung an die App (speichern, neu umbrechen).
+
+import { spaltenSetzen } from '../layout/zuordnen'
 
 export type Ausrichtung = 'left' | 'center' | 'right'
 
@@ -10,11 +13,14 @@ export interface Rueckrufe {
   bildGroesse(id: string, breiteMm: number): void
   /** neue Ausrichtung und Verschiebung nach unten (mm, relativ zur bisherigen Lage) */
   bildVerschieben(id: string, ausrichtung: Ausrichtung, versatzMm: number): void
+  tabelleSpalten(id: string, prozent: number[]): void
+  tabelleBreite(id: string, prozent: number): void
   taste(e: KeyboardEvent): void
   seite(nummer: number): void
 }
 
 const MIN_BREITE_MM = 15
+const MIN_SPALTE_PX = 24
 const gezogen = new WeakSet<Document>()
 const ZIEH_SCHWELLE_PX = 4
 
@@ -28,7 +34,14 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
     const ziel = e.target as Element
     const griff = ziel.closest<HTMLElement>('.druckreif-griff')
     const block = blockVon(ziel)
-    if (griff) {
+    const spalte = ziel.closest<HTMLElement>('.druckreif-spaltengriff')
+    if (spalte) {
+      e.preventDefault()
+      spalteZiehen(dok, spalte, e, rueckrufe)
+    } else if (ziel.closest('.druckreif-breitengriff')) {
+      e.preventDefault()
+      tabellenbreiteZiehen(dok, e, rueckrufe)
+    } else if (griff) {
       e.preventDefault()
       skalieren(dok, griff, e, rueckrufe)
     } else if (block?.tagName === 'FIGURE' && block.classList.contains('druckreif-auswahl') && ziel.tagName === 'IMG') {
@@ -43,7 +56,7 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
       gezogen.delete(dok)
       return
     }
-    if ((e.target as Element).closest('.druckreif-griff')) return
+    if ((e.target as Element).closest('.druckreif-griff, .druckreif-ueberlagerung')) return
     rueckrufe().auswahl(blockVon(e.target as Element)?.getAttribute('data-block') ?? null)
   })
 
@@ -73,12 +86,90 @@ function blockVon(el: Element): HTMLElement | null {
 /** Markiert den gewählten Block; bei Bildern mit Rahmen und Ziehpunkten an den Ecken. */
 export function auswahlZeigen(dok: Document, id: string | null): void {
   for (const el of dok.querySelectorAll('.druckreif-auswahl')) el.classList.remove('druckreif-auswahl')
-  for (const el of dok.querySelectorAll('.druckreif-rahmen')) el.remove()
+  for (const el of dok.querySelectorAll('.druckreif-rahmen, .druckreif-ueberlagerung')) el.remove()
   if (!id) return
   const bloecke = [...dok.querySelectorAll<HTMLElement>(`[data-block="${id}"]`)]
   for (const el of bloecke) el.classList.add('druckreif-auswahl')
   const figure = bloecke.find((el) => el.tagName === 'FIGURE')
   if (figure) rahmenSetzen(figure)
+  const tabelle = bloecke.find((el) => el.tagName === 'TABLE') as HTMLTableElement | undefined
+  if (tabelle) tabellenGriffe(tabelle)
+}
+
+/**
+ * Griffe an den Spaltengrenzen und am rechten Rand einer Tabelle. Sie liegen in einer Ebene über der Seite
+ * (direkt im body), weil Elemente innerhalb einer Tabelle die Tabelle selbst verändern würden.
+ */
+function tabellenGriffe(tabelle: HTMLTableElement) {
+  const dok = tabelle.ownerDocument
+  dok.querySelector('.druckreif-ueberlagerung')?.remove()
+  const fenster = dok.defaultView!
+  const rand = tabelle.getBoundingClientRect()
+  const ebene = dok.createElement('div')
+  ebene.className = 'druckreif-ueberlagerung'
+  ebene.dataset.tabelle = tabelle.dataset.block
+  Object.assign(ebene.style, {
+    left: `${rand.left + fenster.scrollX}px`,
+    top: `${rand.top + fenster.scrollY}px`,
+    width: `${rand.width}px`,
+    height: `${rand.height}px`,
+  })
+  const zellen = [...(tabelle.rows[0]?.cells ?? [])]
+  zellen.slice(0, -1).forEach((zelle, i) => {
+    const griff = dok.createElement('div')
+    griff.className = 'druckreif-spaltengriff'
+    griff.dataset.spalte = String(i)
+    griff.style.left = `${zelle.getBoundingClientRect().right - rand.left}px`
+    ebene.append(griff)
+  })
+  const breite = dok.createElement('div')
+  breite.className = 'druckreif-breitengriff'
+  breite.title = 'Tabellenbreite ziehen'
+  ebene.append(breite)
+  dok.body.append(ebene)
+}
+
+function tabelleZurEbene(dok: Document): HTMLTableElement | null {
+  const id = dok.querySelector<HTMLElement>('.druckreif-ueberlagerung')?.dataset.tabelle
+  return id ? dok.querySelector<HTMLTableElement>(`table[data-block="${id}"]`) : null
+}
+
+function spalteZiehen(dok: Document, griff: HTMLElement, start: PointerEvent, rueckrufe: () => Rueckrufe) {
+  const tabelle = tabelleZurEbene(dok)
+  if (!tabelle) return
+  const i = Number(griff.dataset.spalte)
+  const gesamt = tabelle.getBoundingClientRect().width
+  const breiten = [...tabelle.rows[0].cells].map((z) => z.getBoundingClientRect().width)
+  const paar = breiten[i] + breiten[i + 1]
+  let prozent = breiten.map((b) => (b / gesamt) * 100)
+
+  ziehen(dok, start, (dx) => {
+    const links = Math.min(paar - MIN_SPALTE_PX, Math.max(MIN_SPALTE_PX, breiten[i] + dx))
+    const neu = [...breiten]
+    neu[i] = links
+    neu[i + 1] = paar - links
+    prozent = neu.map((b) => Math.round((b / gesamt) * 1000) / 10)
+    spaltenSetzen(tabelle, prozent)
+    tabellenGriffe(tabelle)
+  }, (bewegt) => {
+    if (bewegt) rueckrufe().tabelleSpalten(tabelle.dataset.block!, prozent)
+  })
+}
+
+function tabellenbreiteZiehen(dok: Document, start: PointerEvent, rueckrufe: () => Rueckrufe) {
+  const tabelle = tabelleZurEbene(dok)
+  if (!tabelle) return
+  const startBreite = tabelle.getBoundingClientRect().width
+  const verfuegbar = tabelle.parentElement?.getBoundingClientRect().width ?? startBreite
+  let prozent = Math.round((startBreite / verfuegbar) * 100)
+
+  ziehen(dok, start, (dx) => {
+    prozent = Math.round(Math.min(100, Math.max(20, ((startBreite + dx) / verfuegbar) * 100)))
+    tabelle.style.width = `${prozent}%`
+    tabellenGriffe(tabelle)
+  }, (bewegt) => {
+    if (bewegt) rueckrufe().tabelleBreite(tabelle.dataset.block!, prozent)
+  })
 }
 
 function rahmenSetzen(figure: HTMLElement) {

@@ -1,7 +1,8 @@
 // „Datei“-Ansicht wie in Word (Backstage): Vault öffnen, Demo, Drucken, Infos zum Vault.
 // Ohne geöffneten Vault ist sie die Startseite.
 
-import { ArrowLeft, FolderOpen, Info, Printer, Sparkles } from 'lucide-react'
+import { ArrowLeft, BookOpen, FolderOpen, Info, Printer, Sparkles, Trash2 } from 'lucide-react'
+import type { Mappe } from '../mappen/mappen'
 import { ordnerZugriffMoeglich } from '../vault/ordnerVault'
 
 interface Props {
@@ -15,6 +16,9 @@ interface Props {
   onGemerkt(): void
   onDemo(): void
   onDrucken: (() => void) | null
+  mappen: Mappe[]
+  onMappeOeffnen(id: string): void
+  onMappeLoeschen(id: string): void
 }
 
 export function Datei(p: Props) {
@@ -61,6 +65,28 @@ export function Datei(p: Props) {
 
         {p.vaultName && (
           <>
+            <h2>
+              <BookOpen size={18} /> Mappen
+            </h2>
+            {p.mappen.length === 0 && <p className="leise">Noch keine Mappen. Eine Notiz anklicken legt automatisch eine an.</p>}
+            <ul className="mappenliste">
+              {p.mappen.map((m) => (
+                <li key={m.id}>
+                  <button className="oeffnen" onClick={() => p.onMappeOeffnen(m.id)}>
+                    <BookOpen size={16} />
+                    <strong>{m.name}</strong>
+                    <span>{m.items.length} {m.items.length === 1 ? 'Notiz' : 'Notizen'}</span>
+                  </button>
+                  <button
+                    className="loeschen"
+                    title="Mappe löschen (Notizen und Layouts bleiben erhalten)"
+                    onClick={() => confirm(`Mappe „${m.name}“ löschen? Die Notizen selbst bleiben unverändert.`) && p.onMappeLoeschen(m.id)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
             <h2>
               <Info size={18} /> Informationen
             </h2>

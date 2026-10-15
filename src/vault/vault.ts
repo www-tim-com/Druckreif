@@ -11,6 +11,8 @@ export interface Vault {
   schreibenText(pfad: string, text: string): Promise<void>
   /** Zeitstempel der letzten Änderung, für "Neu laden bei Änderung" */
   geaendertAm(pfad: string): Promise<number>
+  /** Dateiliste neu einlesen (neue, verschobene, gelöschte Dateien) */
+  aktualisieren(): Promise<void>
 }
 
 export const BILD_ENDUNGEN = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']

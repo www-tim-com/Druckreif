@@ -2,7 +2,7 @@
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Dokument, type NotizTeil, dokumentAufbauen } from './dokument/aufbauen'
+import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen } from './dokument/aufbauen'
 import type { Block } from './dokument/bloecke'
 import type { Hinweis } from './hinweise'
 import {
@@ -13,17 +13,35 @@ import {
   eintragLoeschen,
   eintragZuweisen,
   layoutZuruecksetzen,
-  schriftgroesseSetzen,
+  notizSchriftSetzen,
+  schriftSetzen,
+  tabelleSetzen,
   umbruchSetzen,
 } from './layout/bearbeiten'
 import { type LayoutDatei, type LayoutEintrag, layoutSpeichern } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
+import {
+  type MappenDatei,
+  type MappenEintrag,
+  eintragEntfernen,
+  eintragSetzen,
+  eintragVerschieben,
+  mappeAendern,
+  mappeLoeschen,
+  mappenLaden,
+  mappenSpeichern,
+  neueMappe,
+  notizAnhaengen,
+  notizName,
+  umbenennen,
+} from './mappen/mappen'
 import { type VaultEinstellungen, vaultEinstellungenLaden } from './stil/stil'
 import { Datei } from './ui/Datei'
 import { Hinweise } from './ui/Hinweise'
 import { Kontextmenue } from './ui/Kontextmenue'
 import { Menueband, type Reiter } from './ui/Menueband'
-import { Navigationsbereich } from './ui/Navigationsbereich'
+import { Mappenreiter } from './ui/Mappenreiter'
+import { type NavAnsicht, Navigationsbereich } from './ui/Navigationsbereich'
 import { Statusleiste } from './ui/Statusleiste'
 import { Titelleiste } from './ui/Titelleiste'
 import { demoVault } from './vault/demoVault'
@@ -55,8 +73,13 @@ export function App() {
   const [geladen, setGeladen] = useState<Geladen | null>(null)
   const [gemerkt, setGemerkt] = useState<string | null>(null)
   const [dateiOffen, setDateiOffen] = useState(false)
-  const [liste, setListe] = useState<string[]>([]) // Druckliste: Notizen in Dokument-Reihenfolge
+  // Mappen: alle Zusammenstellungen des Vaults, die offenen Reiter und der aktive
+  const [mappen, setMappen] = useState<MappenDatei>({ version: 1, mappen: [] })
+  const [offen, setOffen] = useState<string[]>([])
+  const [aktivId, setAktivId] = useState<string | null>(null)
+  const [navAnsicht, setNavAnsicht] = useState<NavAnsicht>('notizen')
   const [dokument, setDokument] = useState<Dokument | null>(null)
+  const [baut, setBaut] = useState(false)
   const [stand, setStand] = useState(0) // hochzählen = Dokument neu aufbauen
   const [auswahl, setAuswahl] = useState<string | null>(null) // gewählter Block
   const [reiter, setReiter] = useState<Reiter>('start')
@@ -71,6 +94,7 @@ export function App() {
   const [verlauf, setVerlauf] = useState<{ zurueck: Schritt[]; vor: Schritt[] }>({ zurueck: [], vor: [] })
   const [speichert, setSpeichert] = useState(0)
   const [fehler, setFehler] = useState<string | null>(null)
+  const [bildIstMm, setBildIstMm] = useState<number | null>(null)
   const vorschau = useRef<VorschauSteuerung>(null)
 
   // Neuester Stand jeder Layout-Datei – schneller als das neu aufgebaute Dokument, damit schnelle Folgeänderungen nichts verlieren
@@ -88,15 +112,114 @@ export function App() {
     }
   }
 
-  async function vaultSetzen(vault: Vault) {
-    const [{ einstellungen, hinweise }, notizen] = await Promise.all([vaultEinstellungenLaden(vault), notizenLaden(vault)])
+  /** Vault (neu) einlesen: Einstellungen, Notizliste, Mappen. */
+  async function vaultLesen(vault: Vault) {
+    const [{ einstellungen, hinweise }, notizen, mappenDatei] = await Promise.all([
+      vaultEinstellungenLaden(vault),
+      notizenLaden(vault),
+      mappenLaden(vault),
+    ])
+    mappenRef.current = mappenDatei
+    setMappen(mappenDatei)
     setGeladen({ vault, einstellungen, notizen, hinweise })
+    return { notizen, mappenDatei }
+  }
+
+  async function vaultSetzen(vault: Vault) {
+    let { mappenDatei } = await vaultLesen(vault)
     setVerlauf({ zurueck: [], vor: [] })
     setAuswahl(null)
     setDateiOffen(false)
-    const zuletzt = listeLesen(speicherLesen(`liste:${vault.name}`)).filter((p) => notizen.some((n) => n.pfad === p))
-    setListe(zuletzt.length > 0 ? zuletzt : notizen.slice(0, 1).map((n) => n.pfad))
+    // Übernahme der früheren Druckliste als erste Mappe
+    const alteListe = listeLesen(speicherLesen(`liste:${vault.name}`))
+    if (mappenDatei.mappen.length === 0 && alteListe.length > 0) {
+      const neu = neueMappe(mappenDatei, 'Dokument', alteListe)
+      mappenDatei = neu.datei
+      await mappenSchreiben(vault, mappenDatei)
+    }
+    const ids = mappenDatei.mappen.map((m) => m.id)
+    const warOffen = listeLesen(speicherLesen(`offen:${vault.name}`)).filter((id) => ids.includes(id))
+    const reiter = warOffen.length > 0 ? warOffen : ids.slice(-1)
+    const aktiv = speicherLesen(`aktiv:${vault.name}`)
+    setOffen(reiter)
+    setAktivId(aktiv && reiter.includes(aktiv) ? aktiv : (reiter[0] ?? null))
+    setNavAnsicht(reiter.length > 0 ? 'mappe' : 'notizen')
   }
+
+  /** Aktualisieren (F5): Dateiliste, Notizen, Bilder, Theme und Mappen neu einlesen. */
+  function aktualisieren() {
+    if (!geladen) return
+    versuchen(async () => {
+      setBaut(true)
+      await geladen.vault.aktualisieren()
+      bilderVergessen(geladen.vault)
+      await vaultLesen(geladen.vault)
+      setStand((s) => s + 1)
+    })
+  }
+
+  // ---- Mappen ----
+
+  const mappenRef = useRef(mappen)
+  const aktiveMappe = mappen.mappen.find((m) => m.id === aktivId) ?? null
+
+  async function mappenSchreiben(vault: Vault, datei: MappenDatei) {
+    mappenRef.current = datei
+    setMappen(datei)
+    await mappenSpeichern(vault, datei)
+  }
+
+  function mappenAendern(aendern: (d: MappenDatei) => MappenDatei) {
+    if (!geladen) return
+    const neu = aendern(mappenRef.current)
+    versuchen(() => mappenSchreiben(geladen.vault, neu))
+  }
+
+  function aktiveMappeAendern(aendern: Parameters<typeof mappeAendern>[2]) {
+    if (aktivId) mappenAendern((d) => mappeAendern(d, aktivId, aendern))
+  }
+
+  function mappeOeffnen(id: string) {
+    setOffen((o) => (o.includes(id) ? o : [...o, id]))
+    setAktivId(id)
+    setAuswahl(null)
+    setDateiOffen(false)
+  }
+
+  function neueMappeAnlegen(notizen: string[] = []) {
+    const name = notizen.length === 1 ? notizName(notizen[0]) : 'Neue Mappe'
+    const neu = neueMappe(mappenRef.current, name, notizen)
+    mappenAendern(() => neu.datei)
+    mappeOeffnen(neu.id)
+    // Leere Mappe: gleich die Notizliste zeigen, damit man etwas hinzufügen kann; sonst Ansicht lassen
+    if (notizen.length === 0) setNavAnsicht('notizen')
+  }
+
+  function reiterSchliessen(id: string) {
+    const rest = offen.filter((o) => o !== id)
+    setOffen(rest)
+    if (aktivId === id) setAktivId(rest[Math.max(0, offen.indexOf(id) - 1)] ?? null)
+  }
+
+  /** Klick auf eine Notiz im Baum: an die aktive Mappe hängen (oder hinspringen, wenn sie schon drinsteht). */
+  function notizKlick(pfad: string) {
+    if (!aktiveMappe) return neueMappeAnlegen([pfad])
+    const index = aktiveMappe.items.findIndex((e) => e.note === pfad)
+    if (index >= 0) return mappenSprung(index)
+    aktiveMappeAendern(notizAnhaengen(pfad))
+  }
+
+  function mappenSprung(index: number) {
+    const teil = dokument?.notizen.find((n) => n.mappenIndex === index)
+    if (teil?.bloecke[0]) springen(teil.bloecke[0].id)
+  }
+
+  // Offene Reiter und aktive Mappe pro Vault merken
+  useEffect(() => {
+    if (!geladen) return
+    speicherSchreiben(`offen:${geladen.vault.name}`, JSON.stringify(offen))
+    speicherSchreiben(`aktiv:${geladen.vault.name}`, aktivId ?? '')
+  }, [geladen, offen, aktivId])
 
   // Start: ?demo öffnet den Demo-Vault, sonst den gemerkten Ordner (falls der Browser es ohne Klick erlaubt)
   useEffect(() => {
@@ -112,32 +235,40 @@ export function App() {
     })
   }, [])
 
-  // Dokument aufbauen bei Änderung der Druckliste oder der Dateien
+  // Dokument aufbauen bei Änderung der Mappe oder der Dateien. Kurz warten, damit schnelle Folgeänderungen
+  // (z. B. mehrmals auf einen Pfeil klicken) nur einen Neuaufbau auslösen.
+  const mappenSchluessel = aktiveMappe ? JSON.stringify([aktiveMappe.name, aktiveMappe.items]) : ''
   useEffect(() => {
-    if (!geladen || liste.length === 0) {
+    if (!geladen || !aktiveMappe || aktiveMappe.items.length === 0) {
       setDokument(null)
+      setBaut(false)
       return
     }
     let abgebrochen = false
-    speicherSchreiben(`liste:${geladen.vault.name}`, JSON.stringify(liste))
-    versuchen(async () => {
-      const dok = await dokumentAufbauen(geladen.vault, liste, geladen.einstellungen)
-      if (abgebrochen) return
-      setDokument(dok)
-      if (speichertRef.current === 0) {
-        layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
-        setLayoutStand((s) => s + 1)
-      }
-    })
+    setBaut(true)
+    const timer = setTimeout(() => {
+      versuchen(async () => {
+        const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name)
+        if (abgebrochen) return
+        setDokument(dok)
+        setBaut(false)
+        if (speichertRef.current === 0) {
+          layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
+          setLayoutStand((s) => s + 1)
+        }
+      })
+    }, 120)
     return () => {
       abgebrochen = true
+      clearTimeout(timer)
     }
-  }, [geladen, liste, stand])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geladen, mappenSchluessel, stand])
 
   // Neu laden, wenn eine Notiz in Obsidian gespeichert wurde
   useEffect(() => {
     if (!geladen || !dokument) return
-    const pfade = [...liste, ...dokument.notizen.map((n) => n.pfad)]
+    const pfade = dokument.notizen.map((n) => n.pfad)
     let letzter: number | null = null
     const timer = setInterval(async () => {
       const zeit = Math.max(...(await Promise.all(pfade.map((p) => geladen.vault.geaendertAm(p).catch(() => 0)))))
@@ -145,7 +276,15 @@ export function App() {
       letzter = zeit
     }, 2000)
     return () => clearInterval(timer)
-  }, [geladen, dokument, liste])
+  }, [geladen, dokument])
+
+  // Breite des gewählten Bildes messen (nach jedem Umbruch neu)
+  useEffect(() => {
+    setBildIstMm(null)
+    if (!auswahl) return
+    const t = setTimeout(() => setBildIstMm(vorschau.current?.bildBreiteMm(auswahl) ?? null), 60)
+    return () => clearTimeout(t)
+  }, [auswahl, seiten, dokument])
 
   // Auswahl aufheben, wenn es den Block nach dem Neuaufbau nicht mehr gibt
   useEffect(() => {
@@ -246,7 +385,9 @@ export function App() {
       return
     }
     setAuswahl(id)
-    if (id && blockSuchen(id)?.block.typ === 'image') setReiter('bild')
+    const typ = id ? blockSuchen(id)?.block.typ : null
+    if (typ === 'image') setReiter('bild')
+    if (typ === 'table') setReiter('tabelle')
   }
 
   const taste = useRef<(e: KeyboardEvent) => void>(() => {})
@@ -255,7 +396,8 @@ export function App() {
     const strg = e.ctrlKey || e.metaKey
     const k = e.key.toLowerCase()
     let erledigt = true
-    if (strg && k === 'p') drucken()
+    if (k === 'f5') aktualisieren()
+    else if (strg && k === 'p') drucken()
     else if (imFeld) erledigt = false
     else if (strg && k === 'z' && !e.shiftKey) zurueck()
     else if (strg && (k === 'y' || (k === 'z' && e.shiftKey))) vor()
@@ -283,6 +425,8 @@ export function App() {
         const versatz = Math.min(150, Math.max(-30, (e.image?.offsetYMm ?? 0) + dy))
         return bildSetzen({ align, offsetYMm: versatz || undefined })(e)
       }),
+    tabelleSpalten: (id, prozent) => blockAendern(id, tabelleSetzen({ columnsPct: prozent })),
+    tabelleBreite: (id, prozent) => blockAendern(id, tabelleSetzen({ widthPct: prozent >= 100 ? undefined : prozent })),
     taste: (e) => taste.current(e),
     seite: setSeite,
   }
@@ -312,6 +456,12 @@ export function App() {
         }
         onDemo={() => versuchen(() => vaultSetzen(demoVault()))}
         onDrucken={geladen && dokument ? () => (setDateiOffen(false), setTimeout(drucken, 50)) : null}
+        mappen={mappen.mappen}
+        onMappeOeffnen={mappeOeffnen}
+        onMappeLoeschen={(id) => {
+          reiterSchliessen(id)
+          mappenAendern((d) => mappeLoeschen(d, id))
+        }}
       />
     )
   }
@@ -319,12 +469,16 @@ export function App() {
   const hinweise = [...geladen.hinweise, ...(dokument?.hinweise ?? [])]
   const probleme = hinweise.filter((h) => h.stufe !== 'info').length
   const notizLayout = aktuelleNotiz ? layoutVon(aktuelleNotiz) : null
+  const notizSchrift = { fontSizePt: notizLayout?.settings.fontSizePt, lineHeight: notizLayout?.settings.lineHeight }
+  const notizSchriftAendern = (teil: { fontSizePt?: number; lineHeight?: number }) =>
+    aktuelleNotiz && layoutAendern(aktuelleNotiz.pfad, (l) => notizSchriftSetzen(l, teil))
+  const offeneMappen = offen.map((id) => mappen.mappen.find((m) => m.id === id)).filter((m) => m !== undefined)
   const kontextBlock = kontext ? blockSuchen(kontext.id) : null
 
   return (
     <div className={`app${nav ? ' mit-nav' : ''}${hinweiseOffen ? ' mit-hinweisen' : ''}`}>
       <Titelleiste
-        titel={dokument?.titel ?? geladen.vault.name}
+        titel={aktiveMappe?.name ?? geladen.vault.name}
         speichert={speichert > 0}
         kannZurueck={verlauf.zurueck.length > 0}
         kannVor={verlauf.vor.length > 0}
@@ -341,9 +495,18 @@ export function App() {
         zurueck={zurueck}
         vor={vor}
         drucken={drucken}
+        aktualisieren={aktualisieren}
+        auswahlSchrift={
+          gewaehlt
+            ? { fuer: gewaehlt.beschreibung, fontSizePt: gewaehlt.eintrag?.fontSizePt, lineHeight: gewaehlt.eintrag?.lineHeight }
+            : aktuelleNotiz
+              ? { fuer: `Notiz „${aktuelleNotiz.titel}“`, ...notizSchrift }
+              : null
+        }
+        onAuswahlSchrift={(teil) => (gewaehlt ? blockAendern(auswahl, schriftSetzen(teil)) : notizSchriftAendern(teil))}
         notizName={aktuelleNotiz?.titel ?? null}
-        schriftPt={notizLayout?.settings.fontSizePt}
-        onSchrift={(pt) => aktuelleNotiz && layoutAendern(aktuelleNotiz.pfad, (l) => schriftgroesseSetzen(l, pt))}
+        notizSchrift={notizSchrift}
+        onNotizSchrift={notizSchriftAendern}
         notizHatLayout={!!notizLayout && (notizLayout.items.length > 0 || !!notizLayout.settings.fontSizePt)}
         notizZuruecksetzen={() =>
           aktuelleNotiz &&
@@ -352,6 +515,7 @@ export function App() {
         }
         block={gewaehlt ? { typ: gewaehlt.block.typ, beschreibung: gewaehlt.beschreibung, eintrag: gewaehlt.eintrag } : null}
         blockAendern={(aendern) => blockAendern(auswahl, aendern)}
+        bildIstMm={bildIstMm}
         zoom={zoom}
         onZoom={setZoom}
         nav={nav}
@@ -364,9 +528,16 @@ export function App() {
 
       {nav && (
         <Navigationsbereich
+          ansicht={navAnsicht}
+          onAnsicht={setNavAnsicht}
           notizen={geladen.notizen}
-          liste={liste}
-          onListe={setListe}
+          mappe={aktiveMappe}
+          onNotizKlick={notizKlick}
+          onNeueMappe={(pfad) => neueMappeAnlegen([pfad])}
+          onVerschieben={(von, nach) => aktiveMappeAendern(eintragVerschieben(von, nach))}
+          onEntfernen={(i) => aktiveMappeAendern(eintragEntfernen(i))}
+          onSetzen={(i, teil: Partial<MappenEintrag>) => aktiveMappeAendern(eintragSetzen(i, teil))}
+          onMappenSprung={mappenSprung}
           teile={dokument?.notizen ?? []}
           auswahl={auswahl}
           onSprung={springen}
@@ -376,6 +547,14 @@ export function App() {
       )}
 
       <main className="dokumentbereich">
+        <Mappenreiter
+          mappen={offeneMappen}
+          aktiv={aktivId}
+          onWaehlen={mappeOeffnen}
+          onSchliessen={reiterSchliessen}
+          onNeu={() => neueMappeAnlegen()}
+          onUmbenennen={(id, name) => mappenAendern((d) => mappeAendern(d, id, umbenennen(name)))}
+        />
         {fehler && <div className="fehlerleiste">{fehler}</div>}
         {dokument ? (
           <Vorschau
@@ -386,11 +565,16 @@ export function App() {
             zoom={zoom}
             auswahl={auswahl}
             zeichen={zeichen}
+            baut={baut}
             rueckrufe={rueckrufe}
             onFertig={setSeiten}
           />
         ) : (
-          <div className="leer-hinweis">Links eine Notiz wählen – mit „+“ weitere anhängen.</div>
+          <div className="leer-hinweis">
+            {aktiveMappe
+              ? 'Die Mappe ist leer – links unter „Notizen“ eine Notiz anklicken.'
+              : 'Links unter „Notizen“ eine Notiz anklicken – sie kommt in eine neue Mappe.'}
+          </div>
         )}
       </main>
 

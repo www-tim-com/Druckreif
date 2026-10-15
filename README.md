@@ -35,22 +35,33 @@ Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 einges
 Die Oberfläche ist wie Microsoft Word aufgebaut: Titelleiste mit Schnellzugriff, Menüband, Navigationsbereich links,
 Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten.
 
-1. **Datei:** Vault-Ordner öffnen (wird gemerkt), Demo-Vault, Infos zu Theme und Snippets. Der Vault wird nur gebraucht,
-   damit der Editor Bilder, Theme und Layout-Dateien findet – gedruckt wird nur, was du auswählst.
-2. **Navigation › Notizen:** Klick auf eine Notiz = Dokument aus genau dieser Notiz. „+“ (beim Darüberfahren) hängt
-   weitere an; „Im Dokument“ zeigt die Reihenfolge (↑ ↓ ×). Suche nach Titel, Filter nach Frontmatter (`lernfeld: 3`).
-   Notizen mit ☰ sind Reihenfolgedateien aus Obsidian und stehen für ihre Notizen.
-3. **Navigation › Überschriften:** Klick springt zur Stelle. Das **Auge** blendet einen ganzen Abschnitt im Druck aus,
+1. **Datei:** Vault-Ordner öffnen (wird gemerkt), Demo-Vault, alle **Mappen** öffnen oder löschen, Infos zu Theme und
+   Snippets. Der Vault wird nur gebraucht, damit der Editor Bilder, Theme und Layout-Dateien findet.
+2. **Mappen** sind deine Dokumente: eine benannte Zusammenstellung von Notizen, gespeichert in `.lernzettel/mappen.json`.
+   Offene Mappen stehen als **Reiter** über den Seiten (Doppelklick = umbenennen, „+“ = neue Mappe, × = schließen).
+3. **Navigation › Notizen:** Klick auf eine Notiz hängt sie an die aktive Mappe (steht sie schon drin: Sprung dorthin).
+   Das Ordner-Symbol beim Darüberfahren öffnet die Notiz in einer neuen Mappe. Suche nach Titel, Filter nach
+   Frontmatter (`lernfeld: 3`). Notizen mit ☰ sind Reihenfolgedateien aus Obsidian und stehen für ihre Notizen.
+4. **Navigation › Mappe:** Reihenfolge per Ziehen, × entfernt. Pro Notiz: Seiten-Symbol = beginnt auf **neuer Seite**
+   oder **schließt direkt an**; Pfeil aufklappen = **nur einzelne ##-Abschnitte** übernehmen (Häkchen). Ein Auszug steht
+   immer in den Hinweisen.
+5. **Navigation › Überschriften:** Klick springt zur Stelle. Das **Auge** blendet einen ganzen Abschnitt im Druck aus,
    z. B. „Quellen“. Ausgeblendetes steht immer in den Hinweisen und lässt sich dort wieder einblenden.
-4. **Auf der Seite:** Block anklicken = auswählen, **Rechtsklick** = Kontextmenü (Seitenumbruch, ausblenden, Bild ausrichten, zurücksetzen).
+6. **Auf der Seite:** Block anklicken = auswählen, **Rechtsklick** = Kontextmenü (Seitenumbruch, ausblenden, Bild ausrichten, zurücksetzen).
    - **Bilder:** anklicken → Registerkarte **Bildformat**. Ecke ziehen = Größe, Bild ziehen = verschieben
      (links/mittig/rechts, nach unten). Breite in mm, Ausrichtung, „Text daneben“, Abstand oben, Bild zurücksetzen.
-5. **Start/Layout:** Rückgängig/Wiederholen, Schriftgröße der Notiz, Block im Druck ausblenden, Seitenumbruch davor
-   erzwingen/verhindern/automatisch, Abstand vor/nach in mm, Block oder ganze Notiz zurücksetzen.
-6. **Ansicht:** Zoom, Navigation und Hinweise ein/aus, „Umbrüche zeigen“ markiert manuelle Umbrüche.
-7. **Drucken / PDF** (Strg+P): Druckdialog des Browsers, Ziel „Als PDF speichern“, Ränder „Standard“,
-   Kopf-/Fußzeilen des Browsers aus. Dateiname: Notizname bzw. „A + B + C“, bei einer Reihenfolgedatei deren Überschrift.
-8. **Hinweise** (Statusleiste oder Ansicht): entfernte Plugin-Blöcke, fehlende Bilder, ausgeblendete Abschnitte,
+   - **Tabellen:** anklicken → Registerkarte **Tabellenlayout**. Spaltengrenzen und rechten Rand ziehen; Breite in %,
+     Ausrichtung, Spalten automatisch, Schriftgröße, kompakte Zeilen, „Über Seiten teilen“, Tabelle zurücksetzen.
+7. **Start:** Rückgängig/Wiederholen, **Schriftgröße und Zeilenabstand** der Auswahl (ohne Auswahl: der Notiz), Block
+   im Druck ausblenden, Seitenumbruch, **Aktualisieren** (F5), Drucken.
+8. **Layout:** Seitenumbruch davor erzwingen/verhindern/automatisch, Abstand vor/nach in mm, Block zurücksetzen,
+   Grundschrift und Zeilenabstand der Notiz, Layout der Notiz zurücksetzen.
+9. **Ansicht:** Zoom, Navigation und Hinweise ein/aus, „Umbrüche zeigen“, Aktualisieren.
+10. **Aktualisieren** (F5): liest den Vault neu ein – geänderte Notizen, neue/verschobene/ersetzte Bilder, Theme,
+    Snippets, Mappen. Gespeicherte Notizen werden zusätzlich alle 2 s automatisch erkannt.
+11. **Drucken / PDF** (Strg+P): Druckdialog des Browsers, Ziel „Als PDF speichern“, Ränder „Standard“,
+   Kopf-/Fußzeilen des Browsers aus. Dateiname = Name der Mappe.
+12. **Hinweise** (Statusleiste oder Ansicht): entfernte Plugin-Blöcke, fehlende Bilder, ausgeblendete Abschnitte,
    gelb/rot für Layout-Einträge, die nach einer Textänderung unsicher oder gar nicht zugeordnet wurden.
    Rote Einträge: „Zuweisen …“ und dann den richtigen Block anklicken, oder „Löschen“.
 
@@ -62,6 +73,7 @@ Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsi
 | Strg+Enter | Seitenumbruch vor dem gewählten Block an/aus |
 | Entf | gewählten Block (bei Überschrift: ganzen Abschnitt) im Druck ausblenden |
 | Strg+P | Drucken / PDF |
+| F5 | Aktualisieren |
 | Esc | Auswahl aufheben |
 
 ## Stand (Meilensteine der Spezifikation)
@@ -70,10 +82,10 @@ Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsi
 | --- | --- | --- |
 | 1 | Grundgerüst: Vault, Notizliste, Obsidian-HTML, Theme/Snippets | fertig |
 | 2 | Seiten: Paged.js, Druck-Stylesheet, PDF über Druckdialog | fertig, Vergleich mit `_Referenz.pdf` steht aus |
-| 3 | Automatisches Layout | teilweise: Abschnitte, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum-Regel und gezielte Teilung überlanger Einheiten (Messen) fehlen |
+| 3 | Automatisches Layout | teilweise: Abschnitte, Kapitel ohne ###, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum-Regel und gezielte Teilung überlanger Einheiten (Messen) fehlen |
 | 4 | Nachjustieren | fertig: Bilder ziehen/skalieren/ausrichten/Textfluss, Umbrüche, Abstände, Schriftgröße, Ausblenden, automatisches Speichern |
 | 5 | Verankerung | fertig: Fingerabdrücke, Zuordnung still/gelb/rot, Hinweisliste mit Zuweisen/Löschen, Neu laden |
-| 6 | Feinschliff | Druckliste, Reihenfolgedatei, Rückgängig/Wiederholen, Zurücksetzen (Block/Notiz) fertig; Treueprüfung und „Seite zurücksetzen“ fehlen |
+| 6 | Feinschliff | Mappen mit Reitern (Auszüge, direkt anschließen), Aktualisieren, Tabellen, Schrift/Zeilenabstand, Reihenfolgedatei, Rückgängig/Wiederholen, Zurücksetzen (Block/Notiz) fertig; Treueprüfung und „Seite zurücksetzen“ fehlen |
 
 ## Aufbau
 
@@ -95,6 +107,7 @@ src/
     aufbauen.ts          Ablauf: Notiz(en) -> HTML + Blöcke + Hinweise
     bloecke.ts           Titel, Bild+Beschriftung, Abschnitts-Container, Blöcke mit Fingerabdruck
     diagramme.ts         Mermaid -> SVG
+  mappen/mappen.ts       Mappen (.lernzettel/mappen.json): Notizen, neue Seite/anschließen, Auszüge
   layout/
     layoutDatei.ts       Format der Layout-Datei, laden/speichern
     zuordnen.ts          Fingerabdrücke abgleichen, Layout im HTML anwenden
@@ -108,7 +121,7 @@ src/
     Vorschau.tsx         zwei iframes im Wechsel + Paged.js, Zoom, Drucken
     interaktion.ts       auf der Seite: auswählen, Rechtsklick, Bilder ziehen und skalieren
   ui/                    Word-Oberfläche: Titelleiste, Menueband (+ Band-Bausteine), Navigationsbereich,
-                         Seitenleiste, Druckliste, Gliederung, Hinweise, Statusleiste, Kontextmenue, Datei
+                         Mappenreiter, MappeBereich, Seitenleiste, Gliederung, Hinweise, Statusleiste, Kontextmenue, Datei
 demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisung
 ```
 
@@ -117,7 +130,10 @@ demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisun
 - **Schrift:** Noto Sans ist eingestellt (Variable `--druck-schrift` in `src/stil/druck.css`). Klären, ob stattdessen „Anthropic Serif“ gilt.
 - **Emojis:** es wird die Emoji-Schrift von Windows genutzt, Noto Color Emoji ist nicht eingebunden.
 - **Callout-Icons** fehlen noch (nur Titel).
-- **Ausblenden** ist eine Erweiterung des Layout-Formats (`"hidden": true` am Eintrag). Ausgeblendetes erscheint immer
+- **Erweiterungen des Layout-Formats:** `hidden`, `fontSizePt`/`lineHeight` am Block, `settings.lineHeight`,
+  `table` (`widthPct`, `align`, `columnsPct`, `fontSizePt`, `compact`, `split`). Ältere Dateien bleiben gültig.
+- **Tabellen über Seiten:** Paged.js wiederholt die Kopfzeile auf der Folgeseite nicht zuverlässig.
+- **Ausblenden und Auszüge** nehmen Inhalt aus dem Druck – nur auf ausdrücklichen Wunsch. Ausgeblendetes erscheint immer
   in den Hinweisen, damit nie unbemerkt Inhalt fehlt.
 - **Bildgrößen ohne Angabe** werden nur begrenzt (Textbreite, 45 % Satzspiegel), nicht nach Lesbarkeit gewählt.
 - Weitere offene Fragen siehe Spezifikation (Ablage `.lernzettel/`, PWA, Textkorrekturen, Anki).

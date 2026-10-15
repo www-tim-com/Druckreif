@@ -51,6 +51,13 @@ body,
 .notiz > h1:first-child {
   margin-top: 0;
 }
+/* Mappe: Notiz schließt direkt an die vorige an */
+.notiz + .notiz.anschliessen {
+  break-before: auto;
+}
+.notiz + .notiz.anschliessen > h1:first-child {
+  margin-top: 1.5em;
+}
 
 /* Keine Trennlinien, alle Überschriften linksbündig */
 .markdown-rendered hr {
@@ -74,7 +81,8 @@ body,
  * (Die Leerraum-Regel der Export-Anweisung braucht Messen und folgt in Meilenstein 3.)
  */
 section.unterabschnitt,
-section.abschnitt {
+section.abschnitt,
+section.kapitel.am-stueck {
   break-inside: avoid;
 }
 .markdown-rendered ul,
@@ -93,6 +101,14 @@ section.abschnitt {
   orphans: 2;
   widows: 2;
 }
+
+/* Tabellen aus der Layout-Datei: Breite, Ausrichtung, kompakt, teilbar */
+.markdown-rendered table[data-ausrichtung='center'] { margin-inline: auto; }
+.markdown-rendered table[data-ausrichtung='right'] { margin-inline-start: auto; }
+.markdown-rendered table.kompakt { line-height: 1.2; }
+.markdown-rendered table.kompakt th,
+.markdown-rendered table.kompakt td { padding: 0.1em 0.35em; }
+.markdown-rendered table.teilbar { break-inside: auto; }
 
 /* Tabellen nie breiter als die Textbreite */
 .markdown-rendered table {

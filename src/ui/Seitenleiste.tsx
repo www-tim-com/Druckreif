@@ -1,14 +1,22 @@
 // Ordnerbaum mit Suche nach Titel und Filter nach Frontmatter.
-// Klick auf eine Notiz = nur diese Notiz drucken, "+" = ans Dokument anhängen.
+// Klick auf eine Notiz = an die aktive Mappe anhängen, Ordner-Symbol = in einer neuen Mappe öffnen.
 
 import { useMemo, useState } from 'react'
+import { Check, FolderPlus } from 'lucide-react'
 import { type Notiz, passtZuFilter } from '../vault/notizen'
-import { Druckliste } from './Druckliste'
 
 interface Props {
   notizen: Notiz[]
-  liste: string[]
-  onListe(liste: string[]): void
+  /** Pfade, die schon in der aktiven Mappe stehen */
+  inMappe: Set<string>
+  onKlick(pfad: string): void
+  onNeueMappe(pfad: string): void
+}
+
+interface AnsichtProps {
+  inMappe: Set<string>
+  onKlick(pfad: string): void
+  onNeueMappe(pfad: string): void
 }
 
 interface Ordner {
@@ -18,7 +26,7 @@ interface Ordner {
   notizen: Notiz[]
 }
 
-export function Seitenleiste({ notizen, liste, onListe }: Props) {
+export function Seitenleiste({ notizen, inMappe, onKlick, onNeueMappe }: Props) {
   const [suche, setSuche] = useState('')
   const [filter, setFilter] = useState('')
 
@@ -28,11 +36,10 @@ export function Seitenleiste({ notizen, liste, onListe }: Props) {
     return baumBauen(sichtbar)
   }, [notizen, suche, filter])
 
-  const ansicht = { liste, onListe }
+  const ansicht = { inMappe, onKlick, onNeueMappe }
 
   return (
     <aside className="seitenleiste">
-      <Druckliste liste={liste} onAendern={onListe} />
       <input type="search" placeholder="Titel suchen …" value={suche} onChange={(e) => setSuche(e.target.value)} />
       <input
         type="search"
@@ -47,25 +54,31 @@ export function Seitenleiste({ notizen, liste, onListe }: Props) {
   )
 }
 
-function OrdnerAnsicht({ ordner, liste, onListe, offen }: { ordner: Ordner; liste: string[]; onListe(l: string[]): void; offen: boolean }) {
+function OrdnerAnsicht({ ordner, offen, ...ansicht }: AnsichtProps & { ordner: Ordner; offen: boolean }) {
+  const { inMappe, onKlick, onNeueMappe } = ansicht
   return (
     <ul>
       {ordner.ordner.map((o) => (
         <li key={o.pfad}>
-          <details open={offen || liste.some((p) => p.startsWith(o.pfad + '/'))}>
+          <details open={offen || [...inMappe].some((p) => p.startsWith(o.pfad + '/'))}>
             <summary>{o.name}</summary>
-            <OrdnerAnsicht ordner={o} liste={liste} onListe={onListe} offen={offen} />
+            <OrdnerAnsicht ordner={o} {...ansicht} offen={offen} />
           </details>
         </li>
       ))}
       {ordner.notizen.map((n) => (
         <li key={n.pfad} className="notiz-zeile">
-          <button className={liste.includes(n.pfad) ? 'notiz aktiv' : 'notiz'} onClick={() => onListe([n.pfad])} title={n.pfad}>
+          <button
+            className={inMappe.has(n.pfad) ? 'notiz aktiv' : 'notiz'}
+            onClick={() => onKlick(n.pfad)}
+            title={inMappe.has(n.pfad) ? 'Steht in der Mappe – klicken springt hin' : 'Zur Mappe hinzufügen'}
+          >
             {n.istReihenfolge && <span className="reihenfolge-symbol" title="Reihenfolgedatei">☰ </span>}
             {n.name}
           </button>
-          <button className="dazu" onClick={() => onListe([...liste, n.pfad])} title="ans Dokument anhängen">
-            +
+          {inMappe.has(n.pfad) && <Check size={13} className="in-mappe" />}
+          <button className="dazu" onClick={() => onNeueMappe(n.pfad)} title="In neuer Mappe öffnen">
+            <FolderPlus size={14} />
           </button>
         </li>
       ))}

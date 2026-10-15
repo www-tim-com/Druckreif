@@ -2,7 +2,7 @@
 // Rückgängig/Wiederholen ist deshalb nur ein Stapel von Layouts (siehe App.tsx).
 
 import type { Block } from '../dokument/bloecke'
-import { type BildLayout, type LayoutDatei, type LayoutEintrag, eintragLeer } from './layoutDatei'
+import { type BildLayout, type LayoutDatei, type TabellenLayout, type LayoutEintrag, eintragLeer } from './layoutDatei'
 import { ankerVon } from './zuordnen'
 
 /**
@@ -55,6 +55,20 @@ export function bildSetzen(teil: Partial<BildLayout>) {
   }
 }
 
+/** Tabellenwerte überschreiben; undefined setzt zurück. */
+export function tabelleSetzen(teil: Partial<TabellenLayout>) {
+  return (e: LayoutEintrag): LayoutEintrag => {
+    const tabelle = { ...e.table, ...teil }
+    for (const k of Object.keys(tabelle) as (keyof TabellenLayout)[]) if (tabelle[k] === undefined) delete tabelle[k]
+    return { ...e, table: Object.keys(tabelle).length ? tabelle : undefined }
+  }
+}
+
+/** Schriftgröße und Zeilenabstand eines Blocks */
+export function schriftSetzen(teil: { fontSizePt?: number; lineHeight?: number }) {
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, ...teil })
+}
+
 export function eintragZuruecksetzen(e: LayoutEintrag): LayoutEintrag {
   return { anchor: e.anchor }
 }
@@ -74,8 +88,11 @@ export function eintragZuweisen(layout: LayoutDatei, index: number, block: Block
   return { ...layout, items }
 }
 
-export function schriftgroesseSetzen(layout: LayoutDatei, pt: number | undefined): LayoutDatei {
-  return { ...layout, settings: { ...layout.settings, fontSizePt: pt } }
+/** Grundschrift und Zeilenabstand der ganzen Notiz */
+export function notizSchriftSetzen(layout: LayoutDatei, teil: { fontSizePt?: number; lineHeight?: number }): LayoutDatei {
+  const settings = { ...layout.settings, ...teil }
+  for (const k of Object.keys(settings) as (keyof typeof settings)[]) if (settings[k] === undefined) delete settings[k]
+  return { ...layout, settings }
 }
 
 export function layoutZuruecksetzen(layout: LayoutDatei): LayoutDatei {

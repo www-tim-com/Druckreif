@@ -34,6 +34,16 @@ export interface BildLayout {
   offsetYMm?: number
 }
 
+/** Erweiterung: Tabellen anpassen */
+export interface TabellenLayout {
+  widthPct?: number // Breite in % der Textbreite
+  align?: 'left' | 'center' | 'right'
+  columnsPct?: number[] // Spaltenbreiten in % der Tabellenbreite
+  fontSizePt?: number
+  compact?: boolean // engere Zeilen
+  split?: boolean // darf über Seiten laufen (sonst am Stück)
+}
+
 export interface LayoutEintrag {
   anchor: Anker
   /** true = Umbruch erzwungen, false = Umbruch unterdrückt */
@@ -43,13 +53,17 @@ export interface LayoutEintrag {
   spaceAfterMm?: number
   /** Erweiterung: Block bzw. bei Überschriften der ganze Abschnitt erscheint nicht im Druck (z. B. „Quellen“) */
   hidden?: boolean
+  /** Erweiterung: Schriftgröße und Zeilenabstand nur für diesen Block */
+  fontSizePt?: number
+  lineHeight?: number
+  table?: TabellenLayout
 }
 
 export interface LayoutDatei {
   version: 1
   note: string
   title: string
-  settings: { fontSizePt?: number }
+  settings: { fontSizePt?: number; lineHeight?: number }
   items: LayoutEintrag[]
 }
 
@@ -81,11 +95,13 @@ export async function layoutSpeichern(vault: Vault, layout: LayoutDatei): Promis
 
 /** Leere Einträge (nichts mehr abweichend) fallen beim Speichern weg. */
 export function eintragLeer(e: LayoutEintrag): boolean {
-  return (
-    e.pageBreakBefore === undefined &&
-    !e.hidden &&
-    e.spaceBeforeMm === undefined &&
-    e.spaceAfterMm === undefined &&
-    (!e.image || Object.values(e.image).every((w) => w === undefined))
-  )
+  const { anchor: _anker, ...rest } = e
+  return Object.values(rest).every(leer)
+}
+
+function leer(wert: unknown): boolean {
+  // false zählt nicht als leer: pageBreakBefore: false heißt „Umbruch verhindern“
+  if (wert === undefined) return true
+  if (typeof wert === 'object' && wert !== null && !Array.isArray(wert)) return Object.values(wert).every(leer)
+  return false
 }

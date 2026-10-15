@@ -20,6 +20,8 @@ import { auswahlZeigen, einrichten, type Rueckrufe } from './interaktion'
 export interface VorschauSteuerung {
   drucken(): void
   zuBlock(id: string): void
+  /** tatsächliche Breite eines Bildes in mm (für die Pfeile im Menüband) */
+  bildBreiteMm(id: string): number | null
 }
 
 interface Props {
@@ -31,18 +33,23 @@ interface Props {
   auswahl: string | null
   /** Seitenumbrüche und Ausgeblendetes sichtbar machen (wie ¶ in Word) */
   zeichen: boolean
+  /** Dokument wird gerade neu aufgebaut (Ladebalken) */
+  baut: boolean
   rueckrufe: Rueckrufe
   onFertig(seiten: number): void
   ref?: Ref<VorschauSteuerung>
 }
 
+// Leere Seite in der Farbe der Arbeitsfläche, solange noch nichts umbrochen ist
+const LEER = '<!doctype html><body style="margin:0;background:#e6e6e6"></body>'
+
 const SCHRIFTEN = [notoSans400, notoSans400i, notoSans700, notoSans700i, notoMono, katexCss].join('\n')
 
-export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, rueckrufe, onFertig, ref }: Props) {
+export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, rueckrufe, onFertig, ref }: Props) {
   const rahmen = [useRef<HTMLIFrameElement>(null), useRef<HTMLIFrameElement>(null)]
   const [aktiv, setAktiv] = useState(0)
+  const [umbricht, setUmbricht] = useState(false)
   const aktivRef = useRef(0)
-  const laeuft = useRef(false)
   const aktuell = useRef({ auswahl, zeichen, zoom, rueckrufe, onFertig })
   aktuell.current = { auswahl, zeichen, zoom, rueckrufe, onFertig }
 
@@ -60,17 +67,21 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, rueckr
       document.title = alt
       auswahlZeigen(fenster.document, aktuell.current.auswahl)
     },
+    bildBreiteMm(id) {
+      const img = aktivesFenster()?.contentDocument?.querySelector<HTMLImageElement>(`[data-block="${id}"] img`)
+      return img ? Math.round((img.offsetWidth * 25.4) / 96) : null
+    },
     zuBlock(id) {
       const el = aktivesFenster()?.contentDocument?.querySelector(`[data-block="${id}"]`)
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     },
   }))
 
-  // Neue Fassung im unsichtbaren iframe umbrechen (beim ersten Mal im sichtbaren)
+  // Neue Fassung immer im unsichtbaren iframe umbrechen – auch beim ersten Mal, sonst sieht man kurz
+  // den rohen, seitenbreiten Text, bevor Paged.js die Seiten gebaut hat
   useEffect(() => {
-    const ziel = laeuft.current ? 1 - aktivRef.current : aktivRef.current
-    laeuft.current = true
-    rahmen[ziel].current!.srcdoc = seiteBauen(html, vaultCss, titel)
+    setUmbricht(true)
+    rahmen[1 - aktivRef.current].current!.srcdoc = seiteBauen(html, vaultCss, titel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, vaultCss, titel])
 
@@ -92,6 +103,7 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, rueckr
       if (alt && alt !== neu) neu.contentWindow!.scrollTo(0, alt.contentWindow?.scrollY ?? 0)
       aktivRef.current = nr
       setAktiv(nr)
+      setUmbricht(false)
       aktuell.current.onFertig(dok.querySelectorAll('.pagedjs_page').length)
     }
     window.addEventListener('message', empfangen)
@@ -108,8 +120,9 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, rueckr
 
   return (
     <div className="vorschau">
+      {(baut || umbricht) && <div className="ladebalken" role="progressbar" aria-label="Seiten werden aufgebaut" />}
       {rahmen.map((r, i) => (
-        <iframe key={i} ref={r} title="Seitenansicht" className={i === aktiv ? 'aktiv' : 'wartet'} />
+        <iframe key={i} ref={r} title="Seitenansicht" className={i === aktiv ? 'aktiv' : 'wartet'} srcDoc={LEER} />
       ))}
     </div>
   )

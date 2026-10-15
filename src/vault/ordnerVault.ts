@@ -44,6 +44,7 @@ async function ordnerLaden(stamm: FileSystemDirectoryHandle): Promise<Vault> {
     }
   }
   await durchlaufen(stamm, '')
+  const sortiert = () => [...dateien.keys()].sort((a, b) => a.localeCompare(b, 'de'))
 
   function datei(pfad: string): FileSystemFileHandle {
     const h = dateien.get(pfad)
@@ -53,10 +54,15 @@ async function ordnerLaden(stamm: FileSystemDirectoryHandle): Promise<Vault> {
 
   const vault: Vault = {
     name: stamm.name,
-    dateien: [...dateien.keys()].sort((a, b) => a.localeCompare(b, 'de')),
+    dateien: sortiert(),
     lesenText: async (pfad) => (await datei(pfad).getFile()).text(),
     lesenBlob: async (pfad) => datei(pfad).getFile(),
     geaendertAm: async (pfad) => (await datei(pfad).getFile()).lastModified,
+    async aktualisieren() {
+      dateien.clear()
+      await durchlaufen(stamm, '')
+      vault.dateien = sortiert()
+    },
     async schreibenText(pfad, text) {
       let h = dateien.get(pfad)
       if (!h) {
@@ -66,7 +72,7 @@ async function ordnerLaden(stamm: FileSystemDirectoryHandle): Promise<Vault> {
         for (const teil of teile.slice(0, -1)) dir = await dir.getDirectoryHandle(teil, { create: true })
         h = await dir.getFileHandle(teile[teile.length - 1], { create: true })
         dateien.set(pfad, h)
-        vault.dateien = [...dateien.keys()].sort((a, b) => a.localeCompare(b, 'de'))
+        vault.dateien = sortiert()
       }
       const schreiber = await h.createWritable()
       await schreiber.write(text)

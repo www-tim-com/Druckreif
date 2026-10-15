@@ -54,6 +54,44 @@
   .druckreif-griff.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
   .druckreif-griff.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 
+  /* Tabelle: Griffe an Spaltengrenzen und am rechten Rand (Ebene über der Seite) */
+  .druckreif-ueberlagerung {
+    position: absolute;
+    pointer-events: none;
+    outline: 1px solid #2b579a;
+    outline-offset: 1px;
+  }
+  .druckreif-spaltengriff,
+  .druckreif-breitengriff {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    margin-left: -4px;
+    pointer-events: auto;
+    cursor: col-resize;
+  }
+  .druckreif-spaltengriff:hover,
+  .druckreif-breitengriff:hover {
+    background: linear-gradient(90deg, transparent 3px, #2b579a 3px, #2b579a 5px, transparent 5px);
+  }
+  .druckreif-breitengriff {
+    left: 100%;
+    cursor: ew-resize;
+  }
+  .druckreif-breitengriff::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    width: 7px;
+    height: 18px;
+    margin-top: -9px;
+    background: #fff;
+    border: 1px solid #2b579a;
+    border-radius: 2px;
+  }
+
   /* Formatierungszeichen: manuelle Umbrüche markieren, ohne die Seitenaufteilung zu verschieben */
   body.zeichen .umbruch-vor {
     box-shadow: 0 -4px 0 -2px #2b579a;
@@ -64,7 +102,8 @@
 }
 
 @media print {
-  .druckreif-rahmen {
+  .druckreif-rahmen,
+  .druckreif-ueberlagerung {
     display: none;
   }
 }
