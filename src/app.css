@@ -82,6 +82,31 @@ input[type='number'] { width: 4.5em; margin: 0 4px; }
 }
 .seitenleiste button.notiz.aktiv { background: white; color: var(--akzent); font-weight: 600; }
 .reihenfolge-symbol { color: var(--leise); }
+.seitenleiste .notiz-zeile { display: flex; align-items: center; }
+.seitenleiste button.dazu {
+  visibility: hidden;
+  border: none;
+  background: none;
+  padding: 0 6px;
+  color: var(--akzent);
+  font-weight: 600;
+}
+.seitenleiste .notiz-zeile:hover button.dazu { visibility: visible; }
+
+.druckliste {
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.druckliste h2 { font-size: 12px; margin: 0 0 4px; color: var(--leise); font-weight: 600; }
+.druckliste ol { margin: 0; padding-left: 0; list-style: none; }
+.druckliste li { display: flex; align-items: center; gap: 2px; }
+.druckliste .nummer { color: var(--leise); margin-right: 4px; font-size: 12px; }
+.druckliste .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.druckliste button { padding: 0 6px; border: none; background: none; color: var(--leise); }
+.druckliste button:hover:not(:disabled) { color: var(--akzent); }
+.leer-hinweis { padding: 40px; color: var(--leise); text-align: center; }
 
 .hauptbereich {
   grid-area: haupt;

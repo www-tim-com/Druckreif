@@ -1,5 +1,5 @@
 // Ablauf für die Vorschau: Notiz(en) lesen -> Markdown umwandeln -> gliedern -> Layout anwenden -> HTML.
-// Eine Reihenfolgedatei ergibt mehrere Notizen in einem Dokument, jede auf neuer Seite.
+// Das Dokument besteht aus der Druckliste: eine Notiz oder mehrere hintereinander.
 
 import type { Hinweis, Stufe } from '../hinweise'
 import { layoutAnwenden } from '../layout/zuordnen'
@@ -25,16 +25,27 @@ export interface Dokument {
   hinweise: Hinweis[]
 }
 
-export async function dokumentAufbauen(vault: Vault, pfad: string, einstellungen: VaultEinstellungen): Promise<Dokument> {
+/**
+ * Baut ein Dokument aus einer oder mehreren Notizen (Druckliste), jede auf neuer Seite.
+ * Eine Reihenfolgedatei in der Liste wird durch die Notizen ersetzt, die sie aufzählt.
+ */
+export async function dokumentAufbauen(vault: Vault, auswahl: string[], einstellungen: VaultEinstellungen): Promise<Dokument> {
   const hinweise: Hinweis[] = []
-  const text = await vault.lesenText(pfad)
-  const reihenfolge = reihenfolgeLesen(text)
+  const pfade: string[] = []
+  let titel = auswahl.map((p) => ohneEndung(dateiname(p))).join(' + ')
 
-  let titel = ohneEndung(dateiname(pfad))
-  let pfade = [pfad]
-  if (reihenfolge) {
-    titel = (reihenfolge.titel ?? titel).replace(/[\\/:*?"<>|]/g, '-')
-    pfade = notizenDerReihenfolge(vault, reihenfolge.notizen, pfad, hinweise)
+  for (const pfad of auswahl) {
+    const reihenfolge = reihenfolgeLesen(await vault.lesenText(pfad))
+    if (!reihenfolge) {
+      pfade.push(pfad)
+      continue
+    }
+    if (auswahl.length === 1 && reihenfolge.titel) titel = reihenfolge.titel
+    pfade.push(...notizenDerReihenfolge(vault, reihenfolge.notizen, pfad, hinweise))
+  }
+
+  for (const doppelt of new Set(pfade.filter((p, i) => pfade.indexOf(p) !== i))) {
+    hinweise.push({ stufe: 'gelb', notiz: doppelt, text: 'Notiz steht mehrfach im Dokument' })
   }
 
   const container = document.createElement('div')
@@ -44,19 +55,15 @@ export async function dokumentAufbauen(vault: Vault, pfad: string, einstellungen
     container.append(teil.article)
     notizen.push(teil.notiz)
   }
-  await diagrammeZeichnen(container, (text) => hinweise.push({ stufe: 'rot', notiz: pfad, text }))
+  await diagrammeZeichnen(container, (text) => hinweise.push({ stufe: 'rot', notiz: '', text }))
 
-  return { titel, html: container.innerHTML, notizen, hinweise }
+  // Zeichen, die in Dateinamen nicht erlaubt sind, durch Bindestrich ersetzen
+  return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise }
 }
 
 function notizenDerReihenfolge(vault: Vault, namen: string[], reihenfolgePfad: string, hinweise: Hinweis[]): string[] {
   const pfade: string[] = []
-  const gesehen = new Set<string>()
   for (const name of namen) {
-    if (gesehen.has(name)) {
-      hinweise.push({ stufe: 'gelb', notiz: reihenfolgePfad, text: `„${name}“ steht doppelt in der Reihenfolge` })
-    }
-    gesehen.add(name)
     const treffer = dateiFinden(vault, `${name}.md`, '', '')
     if (typeof treffer === 'string') pfade.push(treffer)
     else {

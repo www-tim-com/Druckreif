@@ -25,7 +25,7 @@ interface Geladen {
 export function App() {
   const [geladen, setGeladen] = useState<Geladen | null>(null)
   const [gemerkt, setGemerkt] = useState<string | null>(null)
-  const [auswahl, setAuswahl] = useState<string | null>(null)
+  const [liste, setListe] = useState<string[]>([]) // Druckliste: Notizen in Dokument-Reihenfolge
   const [dokument, setDokument] = useState<Dokument | null>(null)
   const [stand, setStand] = useState(0) // hochzählen = Dokument neu aufbauen
   const [umbruchModus, setUmbruchModus] = useState(false)
@@ -36,8 +36,8 @@ export function App() {
   async function vaultSetzen(vault: Vault) {
     const [{ einstellungen, hinweise }, notizen] = await Promise.all([vaultEinstellungenLaden(vault), notizenLaden(vault)])
     setGeladen({ vault, einstellungen, notizen, hinweise })
-    const zuletzt = speicherLesen(`zuletzt:${vault.name}`)
-    setAuswahl(notizen.some((n) => n.pfad === zuletzt) ? zuletzt : (notizen[0]?.pfad ?? null))
+    const zuletzt = listeLesen(speicherLesen(`liste:${vault.name}`)).filter((p) => notizen.some((n) => n.pfad === p))
+    setListe(zuletzt.length > 0 ? zuletzt : notizen.slice(0, 1).map((n) => n.pfad))
   }
 
   async function versuchen(aktion: () => Promise<void>) {
@@ -63,24 +63,27 @@ export function App() {
     })
   }, [])
 
-  // Dokument aufbauen bei Auswahl oder Änderung
+  // Dokument aufbauen bei Änderung der Druckliste oder der Dateien
   useEffect(() => {
-    if (!geladen || !auswahl) return
+    if (!geladen || liste.length === 0) {
+      setDokument(null)
+      return
+    }
     let abgebrochen = false
-    speicherSchreiben(`zuletzt:${geladen.vault.name}`, auswahl)
+    speicherSchreiben(`liste:${geladen.vault.name}`, JSON.stringify(liste))
     versuchen(async () => {
-      const dok = await dokumentAufbauen(geladen.vault, auswahl, geladen.einstellungen)
+      const dok = await dokumentAufbauen(geladen.vault, liste, geladen.einstellungen)
       if (!abgebrochen) setDokument(dok)
     })
     return () => {
       abgebrochen = true
     }
-  }, [geladen, auswahl, stand])
+  }, [geladen, liste, stand])
 
   // Neu laden, wenn eine Notiz in Obsidian gespeichert wurde
   useEffect(() => {
     if (!geladen || !dokument) return
-    const pfade = [auswahl!, ...dokument.notizen.map((n) => n.pfad)]
+    const pfade = [...liste, ...dokument.notizen.map((n) => n.pfad)]
     let letzter: number | null = null
     const timer = setInterval(async () => {
       const zeit = Math.max(...(await Promise.all(pfade.map((p) => geladen.vault.geaendertAm(p).catch(() => 0)))))
@@ -88,7 +91,7 @@ export function App() {
       letzter = zeit
     }, 2000)
     return () => clearInterval(timer)
-  }, [geladen, dokument, auswahl])
+  }, [geladen, dokument, liste])
 
   /** Layout einer Notiz ändern, sofort speichern und neu aufbauen. */
   const layoutAendern = useCallback(
@@ -176,10 +179,11 @@ export function App() {
         </button>
       </header>
 
-      <Seitenleiste notizen={geladen.notizen} auswahl={auswahl} onAuswahl={setAuswahl} />
+      <Seitenleiste notizen={geladen.notizen} liste={liste} onListe={setListe} />
 
       <main className="hauptbereich">
         {fehler && <div className="fehler">{fehler}</div>}
+        {liste.length === 0 && <div className="leer-hinweis">Links eine Notiz wählen – mit „+“ weitere anhängen.</div>}
         {dokument && (
           <Vorschau
             ref={vorschau}
@@ -219,6 +223,15 @@ function Start(props: { gemerkt: string | null; fehler: string | null; onOrdner(
       {props.fehler && <p className="fehler">{props.fehler}</p>}
     </div>
   )
+}
+
+function listeLesen(json: string | null): string[] {
+  try {
+    const wert: unknown = JSON.parse(json ?? '[]')
+    return Array.isArray(wert) ? wert.filter((p): p is string => typeof p === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 // localStorage kann gesperrt sein (private Fenster) – dann eben ohne Merken

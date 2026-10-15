@@ -1,12 +1,14 @@
 // Ordnerbaum mit Suche nach Titel und Filter nach Frontmatter.
+// Klick auf eine Notiz = nur diese Notiz drucken, "+" = ans Dokument anhängen.
 
 import { useMemo, useState } from 'react'
 import { type Notiz, passtZuFilter } from '../vault/notizen'
+import { Druckliste } from './Druckliste'
 
 interface Props {
   notizen: Notiz[]
-  auswahl: string | null
-  onAuswahl(pfad: string): void
+  liste: string[]
+  onListe(liste: string[]): void
 }
 
 interface Ordner {
@@ -16,7 +18,7 @@ interface Ordner {
   notizen: Notiz[]
 }
 
-export function Seitenleiste({ notizen, auswahl, onAuswahl }: Props) {
+export function Seitenleiste({ notizen, liste, onListe }: Props) {
   const [suche, setSuche] = useState('')
   const [filter, setFilter] = useState('')
 
@@ -26,8 +28,11 @@ export function Seitenleiste({ notizen, auswahl, onAuswahl }: Props) {
     return baumBauen(sichtbar)
   }, [notizen, suche, filter])
 
+  const ansicht = { liste, onListe }
+
   return (
     <aside className="seitenleiste">
+      <Druckliste liste={liste} onAendern={onListe} />
       <input type="search" placeholder="Titel suchen …" value={suche} onChange={(e) => setSuche(e.target.value)} />
       <input
         type="search"
@@ -36,28 +41,31 @@ export function Seitenleiste({ notizen, auswahl, onAuswahl }: Props) {
         onChange={(e) => setFilter(e.target.value)}
       />
       <div className="baum">
-        <OrdnerAnsicht ordner={baum} auswahl={auswahl} onAuswahl={onAuswahl} offen={!!(suche || filter)} />
+        <OrdnerAnsicht ordner={baum} {...ansicht} offen={!!(suche || filter)} />
       </div>
     </aside>
   )
 }
 
-function OrdnerAnsicht({ ordner, auswahl, onAuswahl, offen }: { ordner: Ordner; auswahl: string | null; onAuswahl(p: string): void; offen: boolean }) {
+function OrdnerAnsicht({ ordner, liste, onListe, offen }: { ordner: Ordner; liste: string[]; onListe(l: string[]): void; offen: boolean }) {
   return (
     <ul>
       {ordner.ordner.map((o) => (
         <li key={o.pfad}>
-          <details open={offen || (auswahl?.startsWith(o.pfad + '/') ?? false)}>
+          <details open={offen || liste.some((p) => p.startsWith(o.pfad + '/'))}>
             <summary>{o.name}</summary>
-            <OrdnerAnsicht ordner={o} auswahl={auswahl} onAuswahl={onAuswahl} offen={offen} />
+            <OrdnerAnsicht ordner={o} liste={liste} onListe={onListe} offen={offen} />
           </details>
         </li>
       ))}
       {ordner.notizen.map((n) => (
-        <li key={n.pfad}>
-          <button className={n.pfad === auswahl ? 'notiz aktiv' : 'notiz'} onClick={() => onAuswahl(n.pfad)} title={n.pfad}>
+        <li key={n.pfad} className="notiz-zeile">
+          <button className={liste.includes(n.pfad) ? 'notiz aktiv' : 'notiz'} onClick={() => onListe([n.pfad])} title={n.pfad}>
             {n.istReihenfolge && <span className="reihenfolge-symbol" title="Reihenfolgedatei">☰ </span>}
             {n.name}
+          </button>
+          <button className="dazu" onClick={() => onListe([...liste, n.pfad])} title="ans Dokument anhängen">
+            +
           </button>
         </li>
       ))}

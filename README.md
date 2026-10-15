@@ -32,13 +32,18 @@ Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 einges
 
 ## Bedienung
 
-1. **Vault öffnen:** Ordner wählen; beim nächsten Start „… wieder öffnen“.
-2. **Notiz wählen:** Ordnerbaum links, Suche nach Titel, Filter nach Frontmatter (`lernfeld: 3`, `status: fertig`).
-   Notizen mit ☰ sind Reihenfolgedateien (Überschrift + Liste von `[[Links]]`) und ergeben ein Dokument aus mehreren Notizen.
+1. **Vault öffnen:** Ordner wählen; beim nächsten Start „… wieder öffnen“. Der Vault wird nur gebraucht,
+   damit der Editor Bilder, Theme und Layout-Dateien findet – gedruckt wird immer nur, was du auswählst.
+2. **Notizen wählen:** Klick auf eine Notiz = Dokument aus genau dieser Notiz. Mit „+“ (erscheint beim Darüberfahren)
+   weitere Notizen anhängen. Die Liste „Im Dokument“ oben links zeigt die Reihenfolge; ↑ ↓ sortieren, × entfernen.
+   Jede Notiz beginnt auf einer neuen Seite, die Seitenzahlen laufen durch. Die Liste wird pro Vault gemerkt.
+   Suche nach Titel und Filter nach Frontmatter (`lernfeld: 3`, `status: fertig`) helfen beim Finden.
+   Notizen mit ☰ sind Reihenfolgedateien aus Obsidian (Überschrift + Liste von `[[Links]]`) und stehen für ihre Notizen.
 3. **Vorschau:** echte A4-Seiten mit Theme, Snippets und Akzentfarbe aus `.obsidian/`.
 4. **Nachjustieren:** „Umbrüche setzen“ einschalten, dann auf einen Block klicken = Seitenumbruch davor an/aus.
    Schriftgröße pro Notiz. Alles wird sofort gespeichert. „Layout zurücksetzen“ verwirft die Änderungen der Notiz.
-5. **Drucken / PDF:** Druckdialog des Browsers, Ziel „Als PDF speichern“. Ränder „Standard“, Kopf-/Fußzeilen des Browsers aus.
+5. **Drucken / PDF:** Druckdialog des Browsers, Ziel „Als PDF speichern“. Dateiname: Notizname bzw. „A + B + C“,
+   bei einer Reihenfolgedatei deren Überschrift. Ränder „Standard“, Kopf-/Fußzeilen des Browsers aus.
 6. **Hinweise** unten: entfernte Plugin-Blöcke und eingebettete Notizen, fehlende Bilder,
    gelb/rot für Layout-Einträge, die nach einer Textänderung unsicher oder gar nicht zugeordnet werden konnten.
    Wird die Notiz in Obsidian gespeichert, aktualisiert sich die Vorschau von selbst.
@@ -52,7 +57,7 @@ Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 einges
 | 3 | Automatisches Layout: Einheiten messen, Umbruch- und Bildregeln | nur Grundlage per CSS (`break-inside: avoid`, Abschnitts-Container) |
 | 4 | Nachjustieren | Umbrüche, Schriftgröße, Speichern fertig; Bilder ziehen/skalieren und Abstände fehlen in der Oberfläche (Datei-Format und Anwendung sind da) |
 | 5 | Verankerung | Fingerabdrücke, Zuordnung (still/gelb/rot), Hinweisliste, Neu laden fertig; „rot per Klick zuweisen“ fehlt |
-| 6 | Feinschliff | Reihenfolgedatei und Layout zurücksetzen fertig; Rückgängig, Treueprüfung fehlen |
+| 6 | Feinschliff | Druckliste (mehrere Notizen), Reihenfolgedatei und Layout zurücksetzen fertig; Rückgängig, Treueprüfung fehlen |
 
 ## Aufbau
 
@@ -84,7 +89,7 @@ src/
     druck.css            Seite, Ränder, Schrift, Fußzeile (hat Vorrang)
     vorschau.css         nur Bildschirm: graue Fläche, Umbruch-Modus
   vorschau/Vorschau.tsx  iframe + Paged.js, Drucken
-  ui/                    Seitenleiste, Hinweise
+  ui/                    Seitenleiste, Druckliste, Hinweise
 demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisung
 ```
 
