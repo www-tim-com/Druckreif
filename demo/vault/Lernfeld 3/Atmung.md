@@ -64,3 +64,8 @@ Zusammenfassung
 - [ ] Normwerte auswendig
 
 [^1]: Diffusion: Teilchenbewegung entlang eines Konzentrationsgefälles.
+
+## Quellen
+
+- Schulungsunterlagen Lernfeld 3, Kapitel Atmung
+- [Lehrbuch Anatomie](https://example.org/anatomie), S. 112–130

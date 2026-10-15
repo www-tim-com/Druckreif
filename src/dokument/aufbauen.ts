@@ -16,6 +16,8 @@ export interface NotizTeil {
   titel: string
   bloecke: Block[]
   layout: LayoutDatei
+  /** Block-ID -> Index des Layout-Eintrags, der an diesem Block hängt */
+  zuordnung: Map<string, number>
 }
 
 export interface Dokument {
@@ -108,14 +110,17 @@ async function notizAufbauen(
   for (const t of weitereTitel) hinweis('info', `Weitere #-Überschrift „${t}“ als Kapitel behandelt`)
 
   let layout: LayoutDatei
+  let zuordnung = new Map<string, number>()
   try {
     layout = await layoutLaden(vault, pfad, titel)
-    hinweise.push(...layoutAnwenden(article, layout, bloecke, pfad))
+    const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
+    hinweise.push(...angewendet.hinweise)
+    zuordnung = angewendet.zuordnung
   } catch (fehler) {
     hinweis('rot', String((fehler as Error).message))
     layout = { version: 1, note: pfad, title: titel, settings: {}, items: [] }
   }
-  return { article, notiz: { pfad, titel, bloecke, layout } }
+  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung } }
 }
 
 // Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden

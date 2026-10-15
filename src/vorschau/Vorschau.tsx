@@ -1,8 +1,9 @@
-// A4-Vorschau: eigenes iframe, damit Theme-CSS die Oberfläche nicht beeinflusst.
-// Paged.js (Polyfill) bricht den Inhalt im iframe in echte Seiten mit Rändern und Seitenzahlen um.
-// Drucken/PDF läuft über den Druckdialog des iframes.
+// A4-Ansicht wie in Word: Seiten auf grauer Fläche, Zoom, Auswahl, Bilder ziehen.
+// Jede Fassung wird in einem eigenen iframe umbrochen (Theme-CSS bleibt von der Oberfläche getrennt).
+// Zwei iframes wechseln sich ab: die neue Fassung wird unsichtbar umbrochen und erst dann eingeblendet,
+// damit die Ansicht bei Änderungen nicht flackert.
 
-import { type Ref, useEffect, useImperativeHandle, useRef } from 'react'
+import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react'
 // Paged.js gibt die Polyfill-Datei nicht über "exports" frei, deshalb der direkte Pfad
 import pagedUrl from '/node_modules/pagedjs/dist/paged.polyfill.js?url'
 import notoSans400 from '@fontsource/noto-sans/400.css?inline'
@@ -14,9 +15,11 @@ import katexCss from 'katex/dist/katex.min.css?inline'
 import obsidianBasis from '../stil/obsidian-basis.css?inline'
 import druckCss from '../stil/druck.css?inline'
 import vorschauCss from '../stil/vorschau.css?inline'
+import { auswahlZeigen, einrichten, type Rueckrufe } from './interaktion'
 
 export interface VorschauSteuerung {
   drucken(): void
+  zuBlock(id: string): void
 }
 
 interface Props {
@@ -24,74 +27,99 @@ interface Props {
   /** CSS aus dem Vault (Theme, Snippets, Akzentfarbe) */
   vaultCss: string[]
   titel: string
-  umbruchModus: boolean
-  onBlockKlick(blockId: string): void
-  onFertig?(seiten: number): void
+  zoom: number // 1 = 100 %
+  auswahl: string | null
+  /** Seitenumbrüche und Ausgeblendetes sichtbar machen (wie ¶ in Word) */
+  zeichen: boolean
+  rueckrufe: Rueckrufe
+  onFertig(seiten: number): void
   ref?: Ref<VorschauSteuerung>
 }
 
 const SCHRIFTEN = [notoSans400, notoSans400i, notoSans700, notoSans700i, notoMono, katexCss].join('\n')
 
-export function Vorschau({ html, vaultCss, titel, umbruchModus, onBlockKlick, onFertig, ref }: Props) {
-  const iframe = useRef<HTMLIFrameElement>(null)
-  const scrollPos = useRef(0)
-  const klick = useRef(onBlockKlick)
-  klick.current = onBlockKlick
-  const modus = useRef(umbruchModus)
-  modus.current = umbruchModus
+export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, rueckrufe, onFertig, ref }: Props) {
+  const rahmen = [useRef<HTMLIFrameElement>(null), useRef<HTMLIFrameElement>(null)]
+  const [aktiv, setAktiv] = useState(0)
+  const aktivRef = useRef(0)
+  const laeuft = useRef(false)
+  const aktuell = useRef({ auswahl, zeichen, zoom, rueckrufe, onFertig })
+  aktuell.current = { auswahl, zeichen, zoom, rueckrufe, onFertig }
+
+  const aktivesFenster = () => rahmen[aktivRef.current].current
 
   useImperativeHandle(ref, () => ({
     drucken() {
-      const fenster = iframe.current?.contentWindow
+      const fenster = aktivesFenster()?.contentWindow
       if (!fenster) return
+      auswahlZeigen(fenster.document, null) // Auswahlrahmen nicht mitdrucken
       // Chrome nimmt den Titel als Dateinamen für "Als PDF speichern"
       const alt = document.title
       document.title = titel
       fenster.print()
       document.title = alt
+      auswahlZeigen(fenster.document, aktuell.current.auswahl)
+    },
+    zuBlock(id) {
+      const el = aktivesFenster()?.contentDocument?.querySelector(`[data-block="${id}"]`)
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     },
   }))
 
-  // Neu aufbauen, wenn sich Inhalt oder Stil ändern
+  // Neue Fassung im unsichtbaren iframe umbrechen (beim ersten Mal im sichtbaren)
   useEffect(() => {
-    const el = iframe.current
-    if (!el) return
-    scrollPos.current = el.contentWindow?.scrollY ?? 0
-    el.srcdoc = seiteBauen(html, vaultCss, titel)
+    const ziel = laeuft.current ? 1 - aktivRef.current : aktivRef.current
+    laeuft.current = true
+    rahmen[ziel].current!.srcdoc = seiteBauen(html, vaultCss, titel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, vaultCss, titel])
 
-  // Nachrichten aus dem iframe: Paged.js fertig
   useEffect(() => {
     function empfangen(e: MessageEvent) {
-      if (e.source !== iframe.current?.contentWindow || e.data?.druckreif !== 'fertig') return
-      const dok = iframe.current!.contentDocument!
+      if (e.data?.druckreif !== 'fertig') return
+      const nr = rahmen.findIndex((r) => r.current?.contentWindow === e.source)
+      if (nr < 0) return
+      const neu = rahmen[nr].current!
+      const dok = neu.contentDocument!
       // Bildschirm-Stil erst jetzt einfügen: Paged.js verarbeitet vorhandene Stylesheets und verwirft @media screen
       const stil = dok.createElement('style')
       stil.textContent = vorschauCss
       dok.head.append(stil)
-      dok.body.classList.toggle('umbruch-modus', modus.current)
-      iframe.current!.contentWindow!.scrollTo(0, scrollPos.current)
-      onFertig?.(dok.querySelectorAll('.pagedjs_page').length)
+      einrichten(neu, () => aktuell.current.rueckrufe)
+      ansichtAnwenden(dok, aktuell.current)
+      // Lesestelle vom bisherigen iframe übernehmen, dann umschalten
+      const alt = rahmen[aktivRef.current].current
+      if (alt && alt !== neu) neu.contentWindow!.scrollTo(0, alt.contentWindow?.scrollY ?? 0)
+      aktivRef.current = nr
+      setAktiv(nr)
+      aktuell.current.onFertig(dok.querySelectorAll('.pagedjs_page').length)
     }
     window.addEventListener('message', empfangen)
     return () => window.removeEventListener('message', empfangen)
-  }, [onFertig])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
+  // Auswahl, Zoom und Formatierungszeichen ohne neuen Umbruch anwenden
   useEffect(() => {
-    iframe.current?.contentDocument?.body?.classList.toggle('umbruch-modus', umbruchModus)
-  }, [umbruchModus])
+    const dok = aktivesFenster()?.contentDocument
+    if (dok?.querySelector('.pagedjs_pages')) ansichtAnwenden(dok, { auswahl, zeichen, zoom })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auswahl, zeichen, zoom, aktiv])
 
-  function geladen() {
-    const dok = iframe.current?.contentDocument
-    dok?.addEventListener('click', (e) => {
-      if (!modus.current) return
-      const block = (e.target as Element).closest('[data-block]')
-      const id = block?.getAttribute('data-block')
-      if (id) klick.current(id)
-    })
-  }
+  return (
+    <div className="vorschau">
+      {rahmen.map((r, i) => (
+        <iframe key={i} ref={r} title="Seitenansicht" className={i === aktiv ? 'aktiv' : 'wartet'} />
+      ))}
+    </div>
+  )
+}
 
-  return <iframe ref={iframe} className="vorschau" title="Seitenvorschau" onLoad={geladen} />
+function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: boolean; zoom: number }) {
+  const seiten = dok.querySelector<HTMLElement>('.pagedjs_pages')
+  if (seiten) seiten.style.zoom = String(a.zoom)
+  dok.body.classList.toggle('zeichen', a.zeichen)
+  auswahlZeigen(dok, a.auswahl)
 }
 
 function seiteBauen(html: string, vaultCss: string[], titel: string): string {

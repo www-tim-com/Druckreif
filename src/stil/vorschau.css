@@ -1,34 +1,70 @@
-/* Nur Bildschirm: Seiten als Blätter auf grauem Grund, Hilfen für das Nachjustieren. */
+/* Nur Bildschirm: Seiten auf grauer Fläche wie in Word, Auswahl, Ziehpunkte, Formatierungszeichen. */
 
 @media screen {
   html,
   body {
-    background: #d9d9de !important;
+    background: #e6e6e6 !important;
     margin: 0;
   }
   .pagedjs_pages {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10mm;
-    padding: 10mm 0 20mm;
+    gap: 6mm;
+    padding: 6mm 0 20mm;
   }
   .pagedjs_page {
     background: #fff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.18);
   }
 
-  /* Umbruch-Modus: Blöcke anklickbar */
-  body.umbruch-modus [data-block] {
-    cursor: pointer;
-    outline: 1px dashed transparent;
+  [data-block] {
+    cursor: default;
+  }
+  .druckreif-auswahl {
+    outline: 1px solid #2b579a;
     outline-offset: 2px;
+    background-color: rgba(43, 87, 154, 0.05);
   }
-  body.umbruch-modus [data-block]:hover {
-    outline-color: rgb(var(--color-blue-rgb));
+
+  /* Bild: Rahmen mit Ziehpunkten an den Ecken */
+  figure.druckreif-auswahl {
+    position: relative;
+    outline: none;
+    background: none;
   }
-  body.umbruch-modus .umbruch-vor,
-  body.umbruch-modus .umbruch-vor > [data-block]:first-child {
-    box-shadow: 0 -3px 0 rgb(var(--color-red-rgb));
+  figure.druckreif-auswahl img {
+    cursor: move;
+  }
+  .druckreif-rahmen {
+    position: absolute;
+    border: 1px solid #2b579a;
+    pointer-events: none;
+  }
+  .druckreif-griff {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border: 1px solid #2b579a;
+    pointer-events: auto;
+  }
+  .druckreif-griff.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+  .druckreif-griff.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+  .druckreif-griff.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+  .druckreif-griff.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+  /* Formatierungszeichen: manuelle Umbrüche markieren, ohne die Seitenaufteilung zu verschieben */
+  body.zeichen .umbruch-vor {
+    box-shadow: 0 -4px 0 -2px #2b579a;
+  }
+  body.zeichen .kein-umbruch-vor {
+    box-shadow: 0 -4px 0 -2px #a19f9d;
+  }
+}
+
+@media print {
+  .druckreif-rahmen {
+    display: none;
   }
 }

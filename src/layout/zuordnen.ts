@@ -75,35 +75,73 @@ export function aehnlichkeit(a: string, b: string): number {
   return (2 * gemeinsam) / (wa.length + wb.length)
 }
 
-/** Wendet das Layout im DOM an und liefert die Hinweise zur Zuordnung. */
-export function layoutAnwenden(
-  wurzel: HTMLElement,
-  layout: LayoutDatei,
-  bloecke: Block[],
-  notizPfad: string,
-): Hinweis[] {
+export interface Angewendet {
+  hinweise: Hinweis[]
+  /** Block-ID -> Index des zugeordneten Layout-Eintrags */
+  zuordnung: Map<string, number>
+}
+
+/** Wendet das Layout im DOM an und liefert Hinweise und die Zuordnung Block -> Eintrag. */
+export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke: Block[], notizPfad: string): Angewendet {
   const hinweise: Hinweis[] = []
+  const zuordnung = new Map<string, number>()
+  const ausblenden: HTMLElement[] = []
   if (layout.settings.fontSizePt) wurzel.style.fontSize = `${layout.settings.fontSizePt}pt`
 
   layout.items.forEach((eintrag, i) => {
     const treffer = blockFinden(eintrag.anchor, bloecke)
-    const beschreibung = `${eintrag.anchor.path.join(' › ')} (${eintrag.anchor.type})`
-    if (!treffer) {
-      hinweise.push({ stufe: 'rot', notiz: notizPfad, text: `Layout nicht zugeordnet: ${beschreibung}`, layoutEintrag: i })
+    const beschreibung = `${eintrag.anchor.path.join(' › ')} (${typName(eintrag.anchor.type)})`
+    if (!treffer || zuordnung.has(treffer.block.id)) {
+      hinweise.push({ stufe: 'rot', notiz: notizPfad, text: `Layout nicht zugeordnet: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung' })
       return
     }
+    const block = treffer.block.id
+    zuordnung.set(block, i)
     if (!treffer.sicher) {
-      hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `Layout unsicher zugeordnet: ${beschreibung}`, layoutEintrag: i })
+      hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `Layout unsicher zugeordnet: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung', block })
     }
-    const el = wurzel.querySelector<HTMLElement>(`[data-block="${treffer.block.id}"]`)
-    if (el) eintragAnwenden(el, eintrag)
+    const el = wurzel.querySelector<HTMLElement>(`[data-block="${block}"]`)
+    if (!el) return
+    if (eintrag.hidden) {
+      // Vom Nutzer gewollt, aber nie stillschweigend: steht in der Hinweisliste mit "Einblenden"
+      const titel = treffer.block.typ === 'heading' ? `Abschnitt „${treffer.block.pfad.at(-1)}“` : `${typName(treffer.block.typ)} in „${treffer.block.pfad.at(-1)}“`
+      hinweise.push({ stufe: 'info', notiz: notizPfad, text: `Im Druck ausgeblendet: ${titel}`, layoutEintrag: i, art: 'ausgeblendet', block })
+      ausblenden.push(abschnittOderBlock(el))
+    } else {
+      eintragAnwenden(el, eintrag)
+    }
   })
-  return hinweise
+  // Erst am Ende entfernen, damit verschachtelte Blöcke vorher noch gefunden werden
+  for (const el of ausblenden) el.remove()
+  return { hinweise, zuordnung }
+}
+
+/** Bei einer Überschrift am Anfang ihres Abschnitts gilt eine Änderung für den ganzen Abschnitt. */
+function abschnittOderBlock(el: HTMLElement): HTMLElement {
+  const section = el.parentElement
+  return /^H[2-4]$/.test(el.tagName) && section?.tagName === 'SECTION' && section.firstElementChild === el ? section : el
+}
+
+const TYP_NAMEN: Record<string, string> = {
+  heading: 'Überschrift',
+  paragraph: 'Absatz',
+  list: 'Liste',
+  table: 'Tabelle',
+  callout: 'Callout',
+  image: 'Bild',
+  code: 'Codeblock',
+  math: 'Formel',
+  diagram: 'Diagramm',
+  footnotes: 'Fußnoten',
+  other: 'Block',
+}
+
+export function typName(typ: string): string {
+  return TYP_NAMEN[typ] ?? typ
 }
 
 function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
-  // Umbruch vor einer Überschrift gilt für ihren ganzen Abschnitt
-  const ziel = /^H[2-4]$/.test(el.tagName) && el.parentElement?.firstElementChild === el ? el.parentElement : el
+  const ziel = abschnittOderBlock(el)
   if (e.pageBreakBefore === true) ziel.classList.add('umbruch-vor')
   if (e.pageBreakBefore === false) ziel.classList.add('kein-umbruch-vor')
   if (e.spaceBeforeMm !== undefined) el.style.marginTop = `${e.spaceBeforeMm}mm`

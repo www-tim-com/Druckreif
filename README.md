@@ -32,21 +32,37 @@ Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 einges
 
 ## Bedienung
 
-1. **Vault öffnen:** Ordner wählen; beim nächsten Start „… wieder öffnen“. Der Vault wird nur gebraucht,
-   damit der Editor Bilder, Theme und Layout-Dateien findet – gedruckt wird immer nur, was du auswählst.
-2. **Notizen wählen:** Klick auf eine Notiz = Dokument aus genau dieser Notiz. Mit „+“ (erscheint beim Darüberfahren)
-   weitere Notizen anhängen. Die Liste „Im Dokument“ oben links zeigt die Reihenfolge; ↑ ↓ sortieren, × entfernen.
-   Jede Notiz beginnt auf einer neuen Seite, die Seitenzahlen laufen durch. Die Liste wird pro Vault gemerkt.
-   Suche nach Titel und Filter nach Frontmatter (`lernfeld: 3`, `status: fertig`) helfen beim Finden.
-   Notizen mit ☰ sind Reihenfolgedateien aus Obsidian (Überschrift + Liste von `[[Links]]`) und stehen für ihre Notizen.
-3. **Vorschau:** echte A4-Seiten mit Theme, Snippets und Akzentfarbe aus `.obsidian/`.
-4. **Nachjustieren:** „Umbrüche setzen“ einschalten, dann auf einen Block klicken = Seitenumbruch davor an/aus.
-   Schriftgröße pro Notiz. Alles wird sofort gespeichert. „Layout zurücksetzen“ verwirft die Änderungen der Notiz.
-5. **Drucken / PDF:** Druckdialog des Browsers, Ziel „Als PDF speichern“. Dateiname: Notizname bzw. „A + B + C“,
-   bei einer Reihenfolgedatei deren Überschrift. Ränder „Standard“, Kopf-/Fußzeilen des Browsers aus.
-6. **Hinweise** unten: entfernte Plugin-Blöcke und eingebettete Notizen, fehlende Bilder,
-   gelb/rot für Layout-Einträge, die nach einer Textänderung unsicher oder gar nicht zugeordnet werden konnten.
-   Wird die Notiz in Obsidian gespeichert, aktualisiert sich die Vorschau von selbst.
+Die Oberfläche ist wie Microsoft Word aufgebaut: Titelleiste mit Schnellzugriff, Menüband, Navigationsbereich links,
+Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten.
+
+1. **Datei:** Vault-Ordner öffnen (wird gemerkt), Demo-Vault, Infos zu Theme und Snippets. Der Vault wird nur gebraucht,
+   damit der Editor Bilder, Theme und Layout-Dateien findet – gedruckt wird nur, was du auswählst.
+2. **Navigation › Notizen:** Klick auf eine Notiz = Dokument aus genau dieser Notiz. „+“ (beim Darüberfahren) hängt
+   weitere an; „Im Dokument“ zeigt die Reihenfolge (↑ ↓ ×). Suche nach Titel, Filter nach Frontmatter (`lernfeld: 3`).
+   Notizen mit ☰ sind Reihenfolgedateien aus Obsidian und stehen für ihre Notizen.
+3. **Navigation › Überschriften:** Klick springt zur Stelle. Das **Auge** blendet einen ganzen Abschnitt im Druck aus,
+   z. B. „Quellen“. Ausgeblendetes steht immer in den Hinweisen und lässt sich dort wieder einblenden.
+4. **Auf der Seite:** Block anklicken = auswählen, **Rechtsklick** = Kontextmenü (Seitenumbruch, ausblenden, Bild ausrichten, zurücksetzen).
+   - **Bilder:** anklicken → Registerkarte **Bildformat**. Ecke ziehen = Größe, Bild ziehen = verschieben
+     (links/mittig/rechts, nach unten). Breite in mm, Ausrichtung, „Text daneben“, Abstand oben, Bild zurücksetzen.
+5. **Start/Layout:** Rückgängig/Wiederholen, Schriftgröße der Notiz, Block im Druck ausblenden, Seitenumbruch davor
+   erzwingen/verhindern/automatisch, Abstand vor/nach in mm, Block oder ganze Notiz zurücksetzen.
+6. **Ansicht:** Zoom, Navigation und Hinweise ein/aus, „Umbrüche zeigen“ markiert manuelle Umbrüche.
+7. **Drucken / PDF** (Strg+P): Druckdialog des Browsers, Ziel „Als PDF speichern“, Ränder „Standard“,
+   Kopf-/Fußzeilen des Browsers aus. Dateiname: Notizname bzw. „A + B + C“, bei einer Reihenfolgedatei deren Überschrift.
+8. **Hinweise** (Statusleiste oder Ansicht): entfernte Plugin-Blöcke, fehlende Bilder, ausgeblendete Abschnitte,
+   gelb/rot für Layout-Einträge, die nach einer Textänderung unsicher oder gar nicht zugeordnet wurden.
+   Rote Einträge: „Zuweisen …“ und dann den richtigen Block anklicken, oder „Löschen“.
+
+Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsidian, aktualisiert sich die Ansicht von selbst.
+
+| Taste | Wirkung |
+| --- | --- |
+| Strg+Z / Strg+Y | Rückgängig / Wiederholen |
+| Strg+Enter | Seitenumbruch vor dem gewählten Block an/aus |
+| Entf | gewählten Block (bei Überschrift: ganzen Abschnitt) im Druck ausblenden |
+| Strg+P | Drucken / PDF |
+| Esc | Auswahl aufheben |
 
 ## Stand (Meilensteine der Spezifikation)
 
@@ -54,10 +70,10 @@ Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 einges
 | --- | --- | --- |
 | 1 | Grundgerüst: Vault, Notizliste, Obsidian-HTML, Theme/Snippets | fertig |
 | 2 | Seiten: Paged.js, Druck-Stylesheet, PDF über Druckdialog | fertig, Vergleich mit `_Referenz.pdf` steht aus |
-| 3 | Automatisches Layout: Einheiten messen, Umbruch- und Bildregeln | nur Grundlage per CSS (`break-inside: avoid`, Abschnitts-Container) |
-| 4 | Nachjustieren | Umbrüche, Schriftgröße, Speichern fertig; Bilder ziehen/skalieren und Abstände fehlen in der Oberfläche (Datei-Format und Anwendung sind da) |
-| 5 | Verankerung | Fingerabdrücke, Zuordnung (still/gelb/rot), Hinweisliste, Neu laden fertig; „rot per Klick zuweisen“ fehlt |
-| 6 | Feinschliff | Druckliste (mehrere Notizen), Reihenfolgedatei und Layout zurücksetzen fertig; Rückgängig, Treueprüfung fehlen |
+| 3 | Automatisches Layout | teilweise: Abschnitte, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum-Regel und gezielte Teilung überlanger Einheiten (Messen) fehlen |
+| 4 | Nachjustieren | fertig: Bilder ziehen/skalieren/ausrichten/Textfluss, Umbrüche, Abstände, Schriftgröße, Ausblenden, automatisches Speichern |
+| 5 | Verankerung | fertig: Fingerabdrücke, Zuordnung still/gelb/rot, Hinweisliste mit Zuweisen/Löschen, Neu laden |
+| 6 | Feinschliff | Druckliste, Reihenfolgedatei, Rückgängig/Wiederholen, Zurücksetzen (Block/Notiz) fertig; Treueprüfung und „Seite zurücksetzen“ fehlen |
 
 ## Aufbau
 
@@ -88,8 +104,11 @@ src/
     obsidian-basis.css   Obsidian-Standardvariablen (hell)
     druck.css            Seite, Ränder, Schrift, Fußzeile (hat Vorrang)
     vorschau.css         nur Bildschirm: graue Fläche, Umbruch-Modus
-  vorschau/Vorschau.tsx  iframe + Paged.js, Drucken
-  ui/                    Seitenleiste, Druckliste, Hinweise
+  vorschau/
+    Vorschau.tsx         zwei iframes im Wechsel + Paged.js, Zoom, Drucken
+    interaktion.ts       auf der Seite: auswählen, Rechtsklick, Bilder ziehen und skalieren
+  ui/                    Word-Oberfläche: Titelleiste, Menueband (+ Band-Bausteine), Navigationsbereich,
+                         Seitenleiste, Druckliste, Gliederung, Hinweise, Statusleiste, Kontextmenue, Datei
 demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisung
 ```
 
@@ -98,5 +117,7 @@ demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisun
 - **Schrift:** Noto Sans ist eingestellt (Variable `--druck-schrift` in `src/stil/druck.css`). Klären, ob stattdessen „Anthropic Serif“ gilt.
 - **Emojis:** es wird die Emoji-Schrift von Windows genutzt, Noto Color Emoji ist nicht eingebunden.
 - **Callout-Icons** fehlen noch (nur Titel).
+- **Ausblenden** ist eine Erweiterung des Layout-Formats (`"hidden": true` am Eintrag). Ausgeblendetes erscheint immer
+  in den Hinweisen, damit nie unbemerkt Inhalt fehlt.
 - **Bildgrößen ohne Angabe** werden nur begrenzt (Textbreite, 45 % Satzspiegel), nicht nach Lesbarkeit gewählt.
 - Weitere offene Fragen siehe Spezifikation (Ablage `.lernzettel/`, PWA, Textkorrekturen, Anki).

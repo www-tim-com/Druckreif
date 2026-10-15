@@ -20,7 +20,9 @@ Grundlage: Spezifikation „Lernzettel-Editor“ und die „PDF-Export-Anweisung
 
 `vault/` (Dateien) → `markdown/` (Markdown → Obsidian-HTML) → `dokument/bloecke.ts` (gliedern, Fingerabdrücke)
 → `layout/zuordnen.ts` (Layout-Datei anwenden) → `vorschau/Vorschau.tsx` (iframe + Paged.js).
-`dokument/aufbauen.ts` steuert den Ablauf, `App.tsx` hält nur Zustand.
+`dokument/aufbauen.ts` steuert den Ablauf, `App.tsx` hält Zustand (Auswahl, Rückgängig-Verlauf) und verdrahtet die
+Word-Oberfläche in `ui/`. Bedienung auf den Seiten (Klick, Rechtsklick, Bild ziehen) steckt in `vorschau/interaktion.ts`
+und meldet nur Absichten an die App; jede Layout-Änderung läuft über die reinen Funktionen in `layout/bearbeiten.ts`.
 
 ## Stolperfallen
 
@@ -28,6 +30,10 @@ Grundlage: Spezifikation „Lernzettel-Editor“ und die „PDF-Export-Anweisung
 - Paged.js löst `url()` gegen `about:srcdoc` auf → `urlsAbsolut()` in `Vorschau.tsx`.
 - Paged.js verwirft `@media screen` aus verarbeiteten Stylesheets → `vorschau.css` wird erst nach dem Umbruch eingefügt.
 - Vites `import.meta.glob` übersieht Ordner mit Punkt → Dateien aus `demo/vault/.obsidian/` in `demoVault.ts` einzeln importieren.
+- Jede Änderung baut das Dokument neu und bricht es in einem zweiten iframe um; erst dann wird umgeschaltet
+  (kein Flackern). Block-IDs (`n0-12`) sind nur innerhalb einer Fassung gültig, Layout hängt am Fingerabdruck.
+- Ausblenden darf nie Inhalt stillschweigend entfernen: jeder ausgeblendete Block erzeugt einen Hinweis mit „Einblenden“.
+  Fußnoten gehören zur Notiz, nicht zum letzten Abschnitt (`bloecke.ts`).
 - Die Polyfill-Datei von Paged.js ist nicht über `exports` freigegeben → Import über `/node_modules/...?url`.
 
 ## Prüfen

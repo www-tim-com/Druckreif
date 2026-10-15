@@ -7,6 +7,10 @@ export interface Hinweis {
   stufe: Stufe
   notiz: string // Pfad der Notiz
   text: string
-  /** Index des betroffenen Eintrags in der Layout-Datei (für "Löschen" in der Hinweisliste) */
+  /** Index des betroffenen Eintrags in der Layout-Datei (für die Knöpfe in der Hinweisliste) */
   layoutEintrag?: number
+  /** ausgeblendet = vom Nutzer aus dem Druck genommen (Knopf "Einblenden") */
+  art?: 'ausgeblendet' | 'zuordnung'
+  /** Block, zu dem der Hinweis gehört (Klick springt dorthin) */
+  block?: string
 }

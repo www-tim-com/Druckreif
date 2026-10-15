@@ -73,7 +73,10 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
       // Ebenen ohne Überschrift dazwischen (z. B. ## direkt auf ####) nicht als Lücke speichern
       for (let i = 0; i < pfad.length; i++) pfad[i] ??= ''
     }
-    if (ebene !== 1) stapel[stapel.length - 1].el.append(el)
+    // Fußnoten gehören zur ganzen Notiz, nicht zum letzten Abschnitt (sonst verschwinden sie mit „Quellen“)
+    const zurNotiz = el.classList.contains('footnotes') || el.classList.contains('footnotes-sep')
+    if (zurNotiz) wurzel.append(el)
+    else if (ebene !== 1) stapel[stapel.length - 1].el.append(el)
 
     const typ: BlockTyp = ebene ? 'heading' : blockTyp(el)
     const bildname = typ === 'image' ? el.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined

@@ -41,6 +41,8 @@ export interface LayoutEintrag {
   image?: BildLayout
   spaceBeforeMm?: number
   spaceAfterMm?: number
+  /** Erweiterung: Block bzw. bei Überschriften der ganze Abschnitt erscheint nicht im Druck (z. B. „Quellen“) */
+  hidden?: boolean
 }
 
 export interface LayoutDatei {
@@ -81,6 +83,7 @@ export async function layoutSpeichern(vault: Vault, layout: LayoutDatei): Promis
 export function eintragLeer(e: LayoutEintrag): boolean {
   return (
     e.pageBreakBefore === undefined &&
+    !e.hidden &&
     e.spaceBeforeMm === undefined &&
     e.spaceAfterMm === undefined &&
     (!e.image || Object.values(e.image).every((w) => w === undefined))

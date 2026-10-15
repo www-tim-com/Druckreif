@@ -68,7 +68,19 @@ body,
   break-after: avoid;
 }
 
-/* Zusammenhalten, was zusammengehört (Grundlage; die gezielte Umbruchberechnung folgt in Meilenstein 3) */
+/*
+ * Zusammenhalten, was zusammengehört. Unterabschnitt (####) und Abschnitt (###) möglichst am Stück;
+ * ist eine Einheit größer als eine Seite, teilt Paged.js sie trotzdem.
+ * (Die Leerraum-Regel der Export-Anweisung braucht Messen und folgt in Meilenstein 3.)
+ */
+section.unterabschnitt,
+section.abschnitt {
+  break-inside: avoid;
+}
+.markdown-rendered ul,
+.markdown-rendered ol {
+  break-inside: avoid;
+}
 .markdown-rendered .callout,
 .markdown-rendered table,
 .markdown-rendered figure,
@@ -122,11 +134,18 @@ body,
 .umbruch-vor {
   break-before: page;
 }
+.kein-umbruch-vor {
+  break-before: avoid;
+}
 figure[data-ausrichtung='center'] img { margin-inline: auto; }
 figure[data-ausrichtung='right'] img { margin-inline-start: auto; }
+/* Textfluss daneben: Bild schwebt, folgender Text des Abschnitts fließt herum */
+figure.umfliessen { width: fit-content; max-width: 60%; }
+figure.umfliessen img { max-width: 100%; }
+figure.umfliessen,
 figure.umfliessen[data-ausrichtung='right'] { float: right; margin-inline-start: 5mm; }
-figure.umfliessen[data-ausrichtung='left'],
-figure.umfliessen:not([data-ausrichtung]) { float: left; margin-inline-end: 5mm; }
+figure.umfliessen[data-ausrichtung='left'] { float: left; margin-inline: 0 5mm; }
+figure.umfliessen[data-ausrichtung='center'] { float: none; margin-inline: auto; }
 section::after { content: ''; display: block; clear: both; }
 
 .mermaid-diagramm svg {
