@@ -114,8 +114,7 @@ function tabellenGriffe(tabelle: HTMLTableElement) {
     width: `${rand.width}px`,
     height: `${rand.height}px`,
   })
-  const zellen = [...(tabelle.rows[0]?.cells ?? [])]
-  zellen.slice(0, -1).forEach((zelle, i) => {
+  spaltenZellen(tabelle).slice(0, -1).forEach((zelle, i) => {
     const griff = dok.createElement('div')
     griff.className = 'druckreif-spaltengriff'
     griff.dataset.spalte = String(i)
@@ -129,6 +128,16 @@ function tabellenGriffe(tabelle: HTMLTableElement) {
   dok.body.append(ebene)
 }
 
+/**
+ * Eine Zelle je Spalte: die erste Zeile ohne verbundene Zellen, die alle Spalten hat. Gibt es keine
+ * (colspan/rowspan überall), keine Spaltengriffe – sonst würden Breiten den falschen Spalten zugeordnet.
+ */
+function spaltenZellen(tabelle: HTMLTableElement): HTMLTableCellElement[] {
+  const zeilen = [...tabelle.rows].map((z) => [...z.cells])
+  const spalten = Math.max(0, ...zeilen.map((z) => z.reduce((n, c) => n + c.colSpan, 0)))
+  return zeilen.find((z) => z.length === spalten && z.every((c) => c.colSpan === 1 && c.rowSpan === 1)) ?? []
+}
+
 function tabelleZurEbene(dok: Document): HTMLTableElement | null {
   const id = dok.querySelector<HTMLElement>('.druckreif-ueberlagerung')?.dataset.tabelle
   return id ? dok.querySelector<HTMLTableElement>(`table[data-block="${id}"]`) : null
@@ -139,7 +148,8 @@ function spalteZiehen(dok: Document, griff: HTMLElement, start: PointerEvent, ru
   if (!tabelle) return
   const i = Number(griff.dataset.spalte)
   const gesamt = tabelle.getBoundingClientRect().width
-  const breiten = [...tabelle.rows[0].cells].map((z) => z.getBoundingClientRect().width)
+  const breiten = spaltenZellen(tabelle).map((z) => z.getBoundingClientRect().width)
+  if (breiten.length < 2) return
   const paar = breiten[i] + breiten[i + 1]
   let prozent = breiten.map((b) => (b / gesamt) * 100)
 

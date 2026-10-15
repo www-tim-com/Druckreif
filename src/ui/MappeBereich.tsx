@@ -28,6 +28,7 @@ export function MappeBereich({ mappe, teile, onVerschieben, onEntfernen, onSetze
     <ol className="mappe">
       {mappe.items.map((eintrag, i) => {
         const teil = teile.find((t) => t.mappenIndex === i && t.pfad === eintrag.note)
+        const reihenfolge = !teil && teile.some((t) => t.mappenIndex === i)
         const neueSeite = eintrag.newPage !== false
         return (
           <li
@@ -75,7 +76,7 @@ export function MappeBereich({ mappe, teile, onVerschieben, onEntfernen, onSetze
                 <X size={14} />
               </button>
             </div>
-            {offen === i && <Abschnittswahl eintrag={eintrag} teil={teil} onSetzen={(t) => onSetzen(i, t)} />}
+            {offen === i && <Abschnittswahl eintrag={eintrag} teil={teil} reihenfolge={reihenfolge} onSetzen={(t) => onSetzen(i, t)} />}
           </li>
         )
       })}
@@ -84,7 +85,18 @@ export function MappeBereich({ mappe, teile, onVerschieben, onEntfernen, onSetze
 }
 
 /** Häkchen pro ##-Abschnitt; alle angehakt = ganze Notiz (sections fällt weg). */
-function Abschnittswahl({ eintrag, teil, onSetzen }: { eintrag: MappenEintrag; teil?: NotizTeil; onSetzen(t: Partial<MappenEintrag>): void }) {
+function Abschnittswahl({
+  eintrag,
+  teil,
+  reihenfolge,
+  onSetzen,
+}: {
+  eintrag: MappenEintrag
+  teil?: NotizTeil
+  reihenfolge: boolean
+  onSetzen(t: Partial<MappenEintrag>): void
+}) {
+  if (reihenfolge) return <p className="mappe-hinweis">Reihenfolgedatei: Abschnitte nur bei einzelnen Notizen wählbar.</p>
   if (!teil) return <p className="mappe-hinweis">Abschnitte erscheinen, sobald die Notiz geladen ist.</p>
   const alle = [...(teil.hatEinleitung ? [''] : []), ...teil.abschnitte]
   if (alle.length <= 1) return <p className="mappe-hinweis">Die Notiz hat keine ##-Abschnitte.</p>

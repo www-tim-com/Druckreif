@@ -114,14 +114,18 @@ export function App() {
 
   /** Vault (neu) einlesen: Einstellungen, Notizliste, Mappen. */
   async function vaultLesen(vault: Vault) {
-    const [{ einstellungen, hinweise }, notizen, mappenDatei] = await Promise.all([
+    const [{ einstellungen, hinweise }, notizen, mappenGeladen] = await Promise.all([
       vaultEinstellungenLaden(vault),
       notizenLaden(vault),
       mappenLaden(vault),
     ])
+    const mappenDatei = mappenGeladen.datei
     mappenRef.current = mappenDatei
+    mappenGesperrt.current = mappenGeladen.gesperrt ? mappenGeladen.fehler! : null
     setMappen(mappenDatei)
-    setGeladen({ vault, einstellungen, notizen, hinweise })
+    const alleHinweise = mappenGeladen.fehler ? [...hinweise, { stufe: 'rot' as const, notiz: '', text: mappenGeladen.fehler }] : hinweise
+    setGeladen({ vault, einstellungen, notizen, hinweise: alleHinweise })
+    if (mappenGeladen.fehler) setFehler(mappenGeladen.fehler)
     return { notizen, mappenDatei }
   }
 
@@ -130,13 +134,14 @@ export function App() {
     setVerlauf({ zurueck: [], vor: [] })
     setAuswahl(null)
     setDateiOffen(false)
-    // Übernahme der früheren Druckliste als erste Mappe
-    const alteListe = listeLesen(speicherLesen(`liste:${vault.name}`))
-    if (mappenDatei.mappen.length === 0 && alteListe.length > 0) {
+    // Einmalige Übernahme der früheren Druckliste als erste Mappe (nur Notizen, die es noch gibt)
+    const alteListe = listeLesen(speicherLesen(`liste:${vault.name}`)).filter((p) => vault.dateien.includes(p))
+    if (mappenDatei.mappen.length === 0 && alteListe.length > 0 && !mappenGesperrt.current) {
       const neu = neueMappe(mappenDatei, 'Dokument', alteListe)
       mappenDatei = neu.datei
       await mappenSchreiben(vault, mappenDatei)
     }
+    if (!mappenGesperrt.current) speicherLoeschen(`liste:${vault.name}`)
     const ids = mappenDatei.mappen.map((m) => m.id)
     const warOffen = listeLesen(speicherLesen(`offen:${vault.name}`)).filter((id) => ids.includes(id))
     const reiter = warOffen.length > 0 ? warOffen : ids.slice(-1)
@@ -151,19 +156,27 @@ export function App() {
     if (!geladen) return
     versuchen(async () => {
       setBaut(true)
-      await geladen.vault.aktualisieren()
-      bilderVergessen(geladen.vault)
-      await vaultLesen(geladen.vault)
-      setStand((s) => s + 1)
+      try {
+        await geladen.vault.aktualisieren()
+        bilderVergessen(geladen.vault)
+        await vaultLesen(geladen.vault)
+      } catch (e) {
+        setBaut(false)
+        throw e
+      }
+      setStand((s) => s + 1) // der Neuaufbau setzt „baut“ wieder zurück
     })
   }
 
   // ---- Mappen ----
 
   const mappenRef = useRef(mappen)
+  // Fehlermeldung, solange mappen.json nicht gelesen werden konnte – dann nicht überschreiben
+  const mappenGesperrt = useRef<string | null>(null)
   const aktiveMappe = mappen.mappen.find((m) => m.id === aktivId) ?? null
 
   async function mappenSchreiben(vault: Vault, datei: MappenDatei) {
+    if (mappenGesperrt.current) throw new Error(mappenGesperrt.current)
     mappenRef.current = datei
     setMappen(datei)
     await mappenSpeichern(vault, datei)
@@ -248,13 +261,16 @@ export function App() {
     setBaut(true)
     const timer = setTimeout(() => {
       versuchen(async () => {
-        const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name)
-        if (abgebrochen) return
-        setDokument(dok)
-        setBaut(false)
-        if (speichertRef.current === 0) {
-          layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
-          setLayoutStand((s) => s + 1)
+        try {
+          const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name)
+          if (abgebrochen) return
+          setDokument(dok)
+          if (speichertRef.current === 0) {
+            layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
+            setLayoutStand((s) => s + 1)
+          }
+        } finally {
+          if (!abgebrochen) setBaut(false)
         }
       })
     }, 120)
@@ -265,10 +281,10 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geladen, mappenSchluessel, stand])
 
-  // Neu laden, wenn eine Notiz in Obsidian gespeichert wurde
+  // Neu laden, wenn eine Notiz oder Reihenfolgedatei in Obsidian gespeichert wurde
   useEffect(() => {
     if (!geladen || !dokument) return
-    const pfade = dokument.notizen.map((n) => n.pfad)
+    const pfade = dokument.quellen
     let letzter: number | null = null
     const timer = setInterval(async () => {
       const zeit = Math.max(...(await Promise.all(pfade.map((p) => geladen.vault.geaendertAm(p).catch(() => 0)))))
@@ -507,7 +523,7 @@ export function App() {
         notizName={aktuelleNotiz?.titel ?? null}
         notizSchrift={notizSchrift}
         onNotizSchrift={notizSchriftAendern}
-        notizHatLayout={!!notizLayout && (notizLayout.items.length > 0 || !!notizLayout.settings.fontSizePt)}
+        notizHatLayout={!!notizLayout && (notizLayout.items.length > 0 || Object.values(notizLayout.settings).some((w) => w !== undefined))}
         notizZuruecksetzen={() =>
           aktuelleNotiz &&
           confirm(`Alle manuellen Änderungen in „${aktuelleNotiz.titel}“ verwerfen? (Rückgängig ist möglich)`) &&
@@ -635,6 +651,14 @@ function speicherLesen(schluessel: string): string | null {
 function speicherSchreiben(schluessel: string, wert: string) {
   try {
     localStorage.setItem(`druckreif:${schluessel}`, wert)
+  } catch {
+    // egal
+  }
+}
+
+function speicherLoeschen(schluessel: string) {
+  try {
+    localStorage.removeItem(`druckreif:${schluessel}`)
   } catch {
     // egal
   }

@@ -26,13 +26,39 @@ export interface MappenDatei {
 
 export const MAPPEN_PFAD = `${LAYOUT_ORDNER}/mappen.json`
 
-export async function mappenLaden(vault: Vault): Promise<MappenDatei> {
-  if (!vault.dateien.includes(MAPPEN_PFAD)) return { version: 1, mappen: [] }
+export interface MappenGeladen {
+  datei: MappenDatei
+  /** Problem beim Lesen – wird als roter Hinweis angezeigt, der Vault öffnet trotzdem */
+  fehler?: string
+  /** true = nicht speichern, sonst würde eine nur vorübergehend unlesbare Datei überschrieben */
+  gesperrt?: boolean
+}
+
+export async function mappenLaden(vault: Vault): Promise<MappenGeladen> {
+  const leer: MappenDatei = { version: 1, mappen: [] }
+  if (!vault.dateien.includes(MAPPEN_PFAD)) return { datei: leer }
+  let text: string
   try {
-    const daten = JSON.parse(await vault.lesenText(MAPPEN_PFAD)) as MappenDatei
-    return { version: 1, mappen: Array.isArray(daten.mappen) ? daten.mappen : [] }
+    text = await vault.lesenText(MAPPEN_PFAD)
+  } catch (e) {
+    const fehler = `${MAPPEN_PFAD} konnte nicht gelesen werden (${(e as Error).message}) – Mappen werden nicht gespeichert, bitte Aktualisieren (F5)`
+    return { datei: leer, fehler, gesperrt: true }
+  }
+  try {
+    const daten = JSON.parse(text) as Partial<MappenDatei>
+    const mappen = Array.isArray(daten.mappen)
+      ? daten.mappen.filter((m) => m && typeof m.id === 'string' && Array.isArray(m.items))
+      : []
+    return { datei: { version: 1, mappen } }
   } catch {
-    throw new Error(`${MAPPEN_PFAD} ist kein gültiges JSON`)
+    // Kaputte Datei sichern, damit neue Mappen sie nicht ersatzlos überschreiben
+    const sicherung = `${LAYOUT_ORDNER}/mappen.defekt.json`
+    try {
+      await vault.schreibenText(sicherung, text)
+    } catch {
+      return { datei: leer, fehler: `${MAPPEN_PFAD} ist kein gültiges JSON – bitte von Hand reparieren`, gesperrt: true }
+    }
+    return { datei: leer, fehler: `${MAPPEN_PFAD} war kein gültiges JSON – gesichert als ${sicherung}, Mappen bitte neu anlegen` }
   }
 }
 
