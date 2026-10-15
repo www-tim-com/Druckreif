@@ -1,0 +1,226 @@
+/*
+ * Nachbau der Obsidian-Standardvariablen und Leseansicht (helle Variante).
+ * Themes und Snippets aus dem Vault überschreiben diese Werte, so wie in Obsidian.
+ * Größen in em, damit sie sich auf die Grundschrift (10,5 pt) beziehen.
+ */
+
+body {
+  --accent-h: 258;
+  --accent-s: 88%;
+  --accent-l: 66%;
+  --color-accent: hsl(var(--accent-h), var(--accent-s), var(--accent-l));
+  --color-accent-1: hsl(calc(var(--accent-h) - 3), calc(var(--accent-s) * 1.02), calc(var(--accent-l) * 1.15));
+
+  --color-red-rgb: 233, 49, 71;
+  --color-orange-rgb: 236, 117, 0;
+  --color-yellow-rgb: 224, 172, 0;
+  --color-green-rgb: 8, 185, 78;
+  --color-cyan-rgb: 0, 191, 188;
+  --color-blue-rgb: 8, 109, 221;
+  --color-purple-rgb: 120, 82, 238;
+  --color-pink-rgb: 213, 57, 132;
+
+  --text-normal: #222222;
+  --text-muted: #5c5c5c;
+  --text-faint: #ababab;
+  --text-accent: var(--color-accent);
+  --text-highlight-bg: rgba(255, 208, 0, 0.4);
+  --background-primary: #ffffff;
+  --background-primary-alt: #fafafa;
+  --background-secondary: #f6f6f6;
+  --background-modifier-border: #e0e0e0;
+  --code-background: #fafafa;
+  --code-normal: #5c5c5c;
+
+  --h1-size: 1.802em;
+  --h2-size: 1.602em;
+  --h3-size: 1.424em;
+  --h4-size: 1.266em;
+  --h5-size: 1.125em;
+  --h6-size: 1.125em;
+  --h1-weight: 700;
+  --h2-weight: 600;
+  --h3-weight: 600;
+  --h4-weight: 600;
+  --h5-weight: 600;
+  --h6-weight: 600;
+  --heading-spacing: 1.25em;
+
+  --tag-color: var(--text-accent);
+  --tag-background: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.1);
+  --tag-padding-x: 0.65em;
+  --tag-padding-y: 0.25em;
+  --tag-radius: 2em;
+
+  --table-border-color: var(--background-modifier-border);
+  --table-header-background: transparent;
+  --table-header-weight: 600;
+
+  --callout-padding: 0.75em 1.5em 0.75em 1.2em;
+  --callout-radius: 4px;
+  --callout-title-weight: 600;
+  --callout-default: var(--color-blue-rgb);
+  --callout-info: var(--color-blue-rgb);
+  --callout-todo: var(--color-blue-rgb);
+  --callout-summary: var(--color-cyan-rgb);
+  --callout-tip: var(--color-cyan-rgb);
+  --callout-success: var(--color-green-rgb);
+  --callout-question: var(--color-orange-rgb);
+  --callout-warning: var(--color-orange-rgb);
+  --callout-fail: var(--color-red-rgb);
+  --callout-error: var(--color-red-rgb);
+  --callout-bug: var(--color-red-rgb);
+  --callout-example: var(--color-purple-rgb);
+  --callout-quote: 158, 158, 158;
+
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+}
+
+.markdown-rendered {
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  margin: var(--heading-spacing) 0 0.5em;
+  line-height: 1.2;
+}
+.markdown-rendered h1 { font-size: var(--h1-size); font-weight: var(--h1-weight); }
+.markdown-rendered h2 { font-size: var(--h2-size); font-weight: var(--h2-weight); }
+.markdown-rendered h3 { font-size: var(--h3-size); font-weight: var(--h3-weight); }
+.markdown-rendered h4 { font-size: var(--h4-size); font-weight: var(--h4-weight); }
+.markdown-rendered h5 { font-size: var(--h5-size); font-weight: var(--h5-weight); }
+.markdown-rendered h6 { font-size: var(--h6-size); font-weight: var(--h6-weight); color: var(--text-muted); }
+
+.markdown-rendered p,
+.markdown-rendered ul,
+.markdown-rendered ol,
+.markdown-rendered table,
+.markdown-rendered pre,
+.markdown-rendered .callout {
+  margin-block: 0 0.9em;
+}
+
+.markdown-rendered ul,
+.markdown-rendered ol {
+  padding-inline-start: 1.6em;
+}
+.markdown-rendered li > ul,
+.markdown-rendered li > ol {
+  margin-block: 0;
+}
+.markdown-rendered .task-list-item {
+  list-style: none;
+}
+.markdown-rendered .task-list-item-checkbox {
+  margin: 0 0.4em 0 -1.4em;
+  vertical-align: middle;
+}
+.markdown-rendered .task-list-item.is-checked {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.markdown-rendered mark {
+  background-color: var(--text-highlight-bg);
+  color: var(--text-normal);
+}
+
+.markdown-rendered a {
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+.markdown-rendered a.tag {
+  background-color: var(--tag-background);
+  color: var(--tag-color);
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding-y) var(--tag-padding-x);
+  font-size: 0.875em;
+  text-decoration: none;
+}
+
+.markdown-rendered table {
+  border-collapse: collapse;
+}
+.markdown-rendered th,
+.markdown-rendered td {
+  border: 1px solid var(--table-border-color);
+  padding: 0.25em 0.5em;
+  text-align: start;
+  vertical-align: top;
+}
+.markdown-rendered th {
+  font-weight: var(--table-header-weight);
+  background: var(--table-header-background);
+}
+
+.markdown-rendered code {
+  background-color: var(--code-background);
+  color: var(--code-normal);
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+  font-size: 0.875em;
+}
+.markdown-rendered pre {
+  background-color: var(--code-background);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 0.75em 1em;
+  white-space: pre-wrap;
+}
+.markdown-rendered pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown-rendered blockquote {
+  border-inline-start: 2px solid var(--color-accent);
+  margin-inline: 0;
+  padding-inline-start: 1.5em;
+}
+
+/* Callouts wie in Obsidian: Farbe kommt über --callout-color (RGB-Tripel) */
+.callout {
+  --callout-color: var(--callout-default);
+  background-color: rgba(var(--callout-color), 0.1);
+  border-radius: var(--callout-radius);
+  padding: var(--callout-padding);
+  overflow: hidden;
+}
+.callout-title {
+  color: rgb(var(--callout-color));
+  font-weight: var(--callout-title-weight);
+  display: flex;
+  gap: 0.4em;
+}
+.callout-content > :last-child {
+  margin-bottom: 0;
+}
+.callout-content > :first-child {
+  margin-top: 0.5em;
+}
+.callout[data-callout='abstract'], .callout[data-callout='summary'], .callout[data-callout='tldr'] { --callout-color: var(--callout-summary); }
+.callout[data-callout='info'] { --callout-color: var(--callout-info); }
+.callout[data-callout='todo'] { --callout-color: var(--callout-todo); }
+.callout[data-callout='tip'], .callout[data-callout='hint'], .callout[data-callout='important'] { --callout-color: var(--callout-tip); }
+.callout[data-callout='success'], .callout[data-callout='check'], .callout[data-callout='done'] { --callout-color: var(--callout-success); }
+.callout[data-callout='question'], .callout[data-callout='help'], .callout[data-callout='faq'] { --callout-color: var(--callout-question); }
+.callout[data-callout='warning'], .callout[data-callout='caution'], .callout[data-callout='attention'] { --callout-color: var(--callout-warning); }
+.callout[data-callout='failure'], .callout[data-callout='fail'], .callout[data-callout='missing'] { --callout-color: var(--callout-fail); }
+.callout[data-callout='danger'], .callout[data-callout='error'] { --callout-color: var(--callout-error); }
+.callout[data-callout='bug'] { --callout-color: var(--callout-bug); }
+.callout[data-callout='example'] { --callout-color: var(--callout-example); }
+.callout[data-callout='quote'], .callout[data-callout='cite'] { --callout-color: var(--callout-quote); }
+
+.markdown-rendered .footnotes {
+  font-size: 0.875em;
+  color: var(--text-muted);
+}
+.markdown-rendered .footnotes-sep {
+  display: none;
+}

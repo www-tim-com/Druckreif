@@ -1,0 +1,124 @@
+/* Oberfläche des Editors (nicht die Druckseiten – die stehen in stil/). */
+
+:root {
+  --rand: #d4d4d8;
+  --flaeche: #f4f4f5;
+  --text: #18181b;
+  --leise: #71717a;
+  --akzent: #4f46e5;
+  --rot: #dc2626;
+  --gelb: #ca8a04;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--akzent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primaer { background: var(--akzent); border-color: var(--akzent); color: white; }
+
+input[type='search'], input[type='number'] {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+}
+input[type='number'] { width: 4.5em; margin: 0 4px; }
+
+.app {
+  display: grid;
+  grid-template: 'kopf kopf' auto 'seite haupt' 1fr / 260px 1fr;
+  height: 100%;
+}
+
+.werkzeugleiste {
+  grid-area: kopf;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rand);
+  background: white;
+}
+.werkzeugleiste .trenner { flex: 1; }
+.werkzeugleiste label { display: flex; align-items: center; gap: 4px; }
+.werkzeugleiste .seiten { color: var(--leise); }
+
+.seitenleiste {
+  grid-area: seite;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-right: 1px solid var(--rand);
+  background: var(--flaeche);
+  overflow: hidden;
+}
+.seitenleiste .baum { overflow: auto; flex: 1; }
+.seitenleiste ul { list-style: none; margin: 0; padding-left: 12px; }
+.seitenleiste .baum > ul { padding-left: 0; }
+.seitenleiste summary { cursor: pointer; padding: 2px 0; color: var(--leise); }
+.seitenleiste button.notiz {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seitenleiste button.notiz.aktiv { background: white; color: var(--akzent); font-weight: 600; }
+.reihenfolge-symbol { color: var(--leise); }
+
+.hauptbereich {
+  grid-area: haupt;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.vorschau { flex: 1; border: none; width: 100%; min-height: 0; }
+
+.hinweise {
+  max-height: 25%;
+  overflow: auto;
+  margin: 0;
+  padding: 6px 12px;
+  list-style: none;
+  border-top: 1px solid var(--rand);
+  background: white;
+}
+.hinweise.leer { color: var(--leise); }
+.hinweis { display: flex; gap: 10px; align-items: center; padding: 3px 0 3px 8px; border-left: 3px solid var(--rand); margin: 2px 0; }
+.hinweis.rot { border-color: var(--rot); }
+.hinweis.gelb { border-color: var(--gelb); }
+.hinweis .notiz { color: var(--leise); font-size: 12px; }
+.hinweis button { margin-left: auto; padding: 1px 8px; }
+
+.fehler { color: var(--rot); padding: 8px 12px; }
+
+.start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  background: var(--flaeche);
+}
+.start h1 { margin: 0; }
+.start p { margin: 0 0 10px; color: var(--leise); }
+.start button { min-width: 260px; padding: 8px 16px; }
+.start .hinweis-text { margin-top: 10px; }

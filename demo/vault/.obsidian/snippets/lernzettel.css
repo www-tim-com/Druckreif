@@ -1,0 +1,9 @@
+/* Beispiel-Snippet: Kapitelüberschriften mit Akzentlinie */
+.markdown-rendered h2 {
+  color: var(--color-accent);
+  border-bottom: 2px solid var(--color-accent);
+  padding-bottom: 0.15em;
+}
+.markdown-rendered h3 {
+  color: var(--color-accent);
+}

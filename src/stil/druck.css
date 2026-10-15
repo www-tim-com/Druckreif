@@ -1,0 +1,140 @@
+/*
+ * Hinweis: Paged.js versteht kein :is()/:where() – Selektoren ausschreiben.
+ *
+ * Druck-Stylesheet: Seite, Ränder, Schrift und Fußzeile nach der PDF-Export-Anweisung.
+ * Wird als letztes geladen und hat Vorrang vor Theme und Snippets.
+ */
+
+:root {
+  /* Offener Punkt der Spezifikation: Noto Sans oder "Anthropic Serif" – hier zentral umstellbar */
+  --druck-schrift: 'Noto Sans', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  --druck-schrift-mono: 'Noto Sans Mono', monospace;
+  --druck-groesse: 10.5pt;
+  --druck-zeilenabstand: 1.35;
+  /* Satzspiegel: 297 mm - 18 mm - 18 mm */
+  --satzspiegel-hoehe: 261mm;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 18mm 18mm 18mm 25mm;
+  @bottom-right {
+    content: counter(page);
+    font-family: var(--druck-schrift);
+    font-size: 9pt;
+    vertical-align: top;
+    padding-top: 4mm;
+  }
+}
+
+body,
+.markdown-rendered {
+  --font-text: var(--druck-schrift);
+  --font-interface: var(--druck-schrift);
+  --font-monospace: var(--druck-schrift-mono);
+  --line-height-normal: var(--druck-zeilenabstand);
+  font-family: var(--druck-schrift);
+  font-size: var(--druck-groesse);
+  line-height: var(--druck-zeilenabstand);
+  hyphens: none;
+  overflow-wrap: anywhere;
+}
+.markdown-rendered code,
+.markdown-rendered pre {
+  font-family: var(--druck-schrift-mono);
+}
+
+/* Jede Notiz beginnt auf einer neuen Seite */
+.notiz + .notiz {
+  break-before: page;
+}
+.notiz > h1:first-child {
+  margin-top: 0;
+}
+
+/* Keine Trennlinien, alle Überschriften linksbündig */
+.markdown-rendered hr {
+  display: none;
+}
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  text-align: left;
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  break-after: avoid;
+}
+
+/* Zusammenhalten, was zusammengehört (Grundlage; die gezielte Umbruchberechnung folgt in Meilenstein 3) */
+.markdown-rendered .callout,
+.markdown-rendered table,
+.markdown-rendered figure,
+.markdown-rendered pre,
+.markdown-rendered .mermaid-diagramm,
+.markdown-rendered .katex-display {
+  break-inside: avoid;
+}
+.markdown-rendered p {
+  orphans: 2;
+  widows: 2;
+}
+
+/* Tabellen nie breiter als die Textbreite */
+.markdown-rendered table {
+  width: 100%;
+  table-layout: auto;
+}
+.markdown-rendered thead {
+  display: table-header-group;
+}
+.markdown-rendered tr {
+  break-inside: avoid;
+}
+
+/* Bilder: höchstens Textbreite und 45 % der Satzspiegelhöhe, nie verzerrt */
+.markdown-rendered img {
+  max-width: 100%;
+  max-height: calc(var(--satzspiegel-hoehe) * 0.45);
+  height: auto;
+  object-fit: contain;
+}
+.markdown-rendered figure.bild-block {
+  margin: 0 0 0.9em;
+}
+.markdown-rendered figure.bild-block img {
+  display: block;
+}
+.markdown-rendered figcaption {
+  font-size: 9pt;
+  margin-top: 0.3em;
+}
+.markdown-rendered .bild-fehlt {
+  display: inline-block;
+  border: 1.5px dashed rgb(var(--color-red-rgb));
+  color: rgb(var(--color-red-rgb));
+  padding: 0.3em 0.6em;
+}
+
+/* Manuelles Layout aus der Layout-Datei */
+.umbruch-vor {
+  break-before: page;
+}
+figure[data-ausrichtung='center'] img { margin-inline: auto; }
+figure[data-ausrichtung='right'] img { margin-inline-start: auto; }
+figure.umfliessen[data-ausrichtung='right'] { float: right; margin-inline-start: 5mm; }
+figure.umfliessen[data-ausrichtung='left'],
+figure.umfliessen:not([data-ausrichtung]) { float: left; margin-inline-end: 5mm; }
+section::after { content: ''; display: block; clear: both; }
+
+.mermaid-diagramm svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-fehler {
+  border: 1.5px dashed rgb(var(--color-red-rgb));
+  color: rgb(var(--color-red-rgb));
+  padding: 0.3em 0.6em;
+}

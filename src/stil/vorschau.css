@@ -1,0 +1,34 @@
+/* Nur Bildschirm: Seiten als Blätter auf grauem Grund, Hilfen für das Nachjustieren. */
+
+@media screen {
+  html,
+  body {
+    background: #d9d9de !important;
+    margin: 0;
+  }
+  .pagedjs_pages {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10mm;
+    padding: 10mm 0 20mm;
+  }
+  .pagedjs_page {
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Umbruch-Modus: Blöcke anklickbar */
+  body.umbruch-modus [data-block] {
+    cursor: pointer;
+    outline: 1px dashed transparent;
+    outline-offset: 2px;
+  }
+  body.umbruch-modus [data-block]:hover {
+    outline-color: rgb(var(--color-blue-rgb));
+  }
+  body.umbruch-modus .umbruch-vor,
+  body.umbruch-modus .umbruch-vor > [data-block]:first-child {
+    box-shadow: 0 -3px 0 rgb(var(--color-red-rgb));
+  }
+}
