@@ -13,6 +13,7 @@ Läuft lokal im Browser (Chrome/Edge), ohne Server im Internet; die Notizen werd
 | Demo ohne eigenen Vault | im Editor „Demo-Vault ansehen“ oder `http://localhost:5173/?demo` |
 | Demo-Version bauen | `npm run demo` – baut nach `dist/` und öffnet die Demo |
 | Typen prüfen | `npm run check` |
+| PDFs zusammenfügen (Windows) | PDFs oder einen Ordner auf `pdfs-zusammenfuegen.bat` ziehen – sortiert nach Dateiname, Ergebnis `zusammengefuegt.pdf` daneben (überschreibt nie) |
 
 Voraussetzung: [Node.js](https://nodejs.org) ab Version 20.
 
