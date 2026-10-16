@@ -19,3 +19,7 @@ Sinusknoten → AV-Knoten → His-Bündel → Tawara-Schenkel → Purkinje-Faser
 > Wo entsteht der Herzrhythmus normalerweise? ^frage1
 
 Ein Wort mit <u>Unterstreichung</u> und H<sub>2</sub>O bleibt erhalten.
+
+## Verwandte Themen
+
+![[Asthma bronchiale#Maßnahmen]]

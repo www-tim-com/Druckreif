@@ -16,12 +16,24 @@ import obsidianBasis from '../stil/obsidian-basis.css?inline'
 import druckCss from '../stil/druck.css?inline'
 import vorschauCss from '../stil/vorschau.css?inline'
 import { auswahlZeigen, einrichten, type Rueckrufe } from './interaktion'
+import { type Leerraum, leerraumFinden } from './leerraum'
+import { type Treffer, suchen, trefferZeigen } from './suche'
 
 export interface VorschauSteuerung {
   drucken(): void
   zuBlock(id: string): void
   /** tatsächliche Breite eines Bildes in mm (für die Pfeile im Menüband) */
   bildBreiteMm(id: string): number | null
+  zuSeite(nummer: number): void
+  /** Momentaufnahme der umbrochenen Seiten als HTML (für die Seitenminiaturen) */
+  miniaturHtml(): string | null
+  /** Unsichtbar umbrechen und die Seiten zählen; `anpassen` ändert vorher eine Kopie des Inhalts (automatisch formatieren) */
+  seitenMessen(anpassen: (inhalt: DocumentFragment) => void): Promise<number>
+}
+
+export interface Fertig {
+  seiten: number
+  leerraum: Leerraum[]
 }
 
 interface Props {
@@ -35,8 +47,14 @@ interface Props {
   zeichen: boolean
   /** Dokument wird gerade neu aufgebaut (Ladebalken) */
   baut: boolean
+  /** Callouts und Tabellenköpfe ohne farbige Flächen (druck.css) */
+  tinteSparen: boolean
+  /** Suchbegriff (Strg+F) und gewählter Treffer */
+  suche: string
+  trefferAktiv: number
+  onTreffer(treffer: Treffer[]): void
   rueckrufe: Rueckrufe
-  onFertig(seiten: number): void
+  onFertig(fertig: Fertig): void
   ref?: Ref<VorschauSteuerung>
 }
 
@@ -45,7 +63,9 @@ const LEER = '<!doctype html><body style="margin:0;background:#e6e6e6"></body>'
 
 const SCHRIFTEN = [notoSans400, notoSans400i, notoSans700, notoSans700i, notoMono, katexCss].join('\n')
 
-export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, rueckrufe, onFertig, ref }: Props) {
+export function Vorschau(p: Props) {
+  const { html, vaultCss, titel, zoom, auswahl, zeichen, baut, tinteSparen, suche, trefferAktiv, ref } = p
+  const flaeche = useRef<HTMLDivElement>(null)
   const rahmen = [useRef<HTMLIFrameElement>(null), useRef<HTMLIFrameElement>(null)]
   const [aktiv, setAktiv] = useState(0)
   const [umbricht, setUmbricht] = useState(false)
@@ -53,8 +73,8 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
   // Nummer der Fassung, die jedes iframe gerade umbricht: eine späte „fertig“-Meldung einer älteren Fassung zählt nicht
   const fassung = useRef(0)
   const erwartet = useRef([0, 0])
-  const aktuell = useRef({ auswahl, zeichen, zoom, rueckrufe, onFertig })
-  aktuell.current = { auswahl, zeichen, zoom, rueckrufe, onFertig }
+  const aktuell = useRef(p)
+  aktuell.current = p
 
   const aktivesFenster = () => rahmen[aktivRef.current].current
 
@@ -78,6 +98,46 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
       const el = aktivesFenster()?.contentDocument?.querySelector(`[data-block="${id}"]`)
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     },
+    zuSeite(nummer) {
+      const seite = aktivesFenster()?.contentDocument?.querySelectorAll('.pagedjs_page')[nummer - 1]
+      seite?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    },
+    miniaturHtml() {
+      const dok = aktivesFenster()?.contentDocument
+      if (!dok?.querySelector('.pagedjs_pages')) return null
+      const kopie = dok.documentElement.cloneNode(true) as HTMLElement
+      // Ohne Skripte (Paged.js würde sonst noch einmal umbrechen), ohne Auswahl und Griffe
+      for (const el of kopie.querySelectorAll('script, .druckreif-rahmen, .druckreif-ueberlagerung')) el.remove()
+      for (const el of kopie.querySelectorAll('.druckreif-auswahl')) el.classList.remove('druckreif-auswahl')
+      kopie.querySelector<HTMLElement>('.pagedjs_pages')?.style.removeProperty('zoom')
+      return '<!doctype html>' + kopie.outerHTML
+    },
+    seitenMessen(anpassen) {
+      return new Promise((fertig, fehler) => {
+        const messung = document.createElement('iframe')
+        messung.className = 'messung'
+        messung.setAttribute('aria-hidden', 'true')
+        const ende = (ergebnis: () => void) => {
+          window.removeEventListener('message', empfangen)
+          clearTimeout(zeit)
+          messung.remove()
+          ergebnis()
+        }
+        const empfangen = (e: MessageEvent) => {
+          if (e.data?.druckreif !== 'fertig' || e.source !== messung.contentWindow) return
+          const seiten = messung.contentDocument?.querySelectorAll('.pagedjs_page').length ?? 0
+          ende(() => fertig(seiten))
+        }
+        const zeit = setTimeout(() => ende(() => fehler(new Error('Messen dauert zu lange'))), 60_000)
+        window.addEventListener('message', empfangen)
+        const a = aktuell.current
+        const kopie = document.createElement('template')
+        kopie.innerHTML = a.html
+        anpassen(kopie.content)
+        messung.srcdoc = seiteBauen(kopie.innerHTML, a.vaultCss, a.titel, -1, a.tinteSparen)
+        flaeche.current!.append(messung)
+      })
+    },
   }))
 
   // Neue Fassung immer im unsichtbaren iframe umbrechen – auch beim ersten Mal, sonst sieht man kurz
@@ -86,9 +146,9 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
     setUmbricht(true)
     const ziel = 1 - aktivRef.current
     erwartet.current[ziel] = ++fassung.current
-    rahmen[ziel].current!.srcdoc = seiteBauen(html, vaultCss, titel, fassung.current)
+    rahmen[ziel].current!.srcdoc = seiteBauen(html, vaultCss, titel, fassung.current, tinteSparen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, vaultCss, titel])
+  }, [html, vaultCss, titel, tinteSparen])
 
   useEffect(() => {
     function empfangen(e: MessageEvent) {
@@ -103,13 +163,16 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
       dok.head.append(stil)
       einrichten(neu, () => aktuell.current.rueckrufe)
       ansichtAnwenden(dok, aktuell.current)
+      const leerraum = leerraumFinden(dok)
+      aktuell.current.onTreffer(suchen(dok, aktuell.current.suche))
+      trefferZeigen(dok, aktuell.current.trefferAktiv, false)
       // Lesestelle vom bisherigen iframe übernehmen, dann umschalten
       const alt = rahmen[aktivRef.current].current
       if (alt && alt !== neu) neu.contentWindow!.scrollTo(0, alt.contentWindow?.scrollY ?? 0)
       aktivRef.current = nr
       setAktiv(nr)
       setUmbricht(false)
-      aktuell.current.onFertig(dok.querySelectorAll('.pagedjs_page').length)
+      aktuell.current.onFertig({ seiten: dok.querySelectorAll('.pagedjs_page').length, leerraum })
     }
     window.addEventListener('message', empfangen)
     return () => window.removeEventListener('message', empfangen)
@@ -123,8 +186,22 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auswahl, zeichen, zoom, aktiv])
 
+  // Suchen ohne neuen Umbruch; neuer Begriff = Treffer neu sammeln, neuer aktiver Treffer = hinscrollen
+  useEffect(() => {
+    const dok = aktivesFenster()?.contentDocument
+    if (!dok?.querySelector('.pagedjs_pages')) return
+    aktuell.current.onTreffer(suchen(dok, suche))
+    trefferZeigen(dok, aktuell.current.trefferAktiv, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suche])
+  useEffect(() => {
+    const dok = aktivesFenster()?.contentDocument
+    if (dok?.querySelector('.pagedjs_pages')) trefferZeigen(dok, trefferAktiv, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trefferAktiv])
+
   return (
-    <div className="vorschau">
+    <div className="vorschau" ref={flaeche}>
       {(baut || umbricht) && <div className="ladebalken" role="progressbar" aria-label="Seiten werden aufgebaut" />}
       {rahmen.map((r, i) => (
         <iframe key={i} ref={r} title="Seitenansicht" className={i === aktiv ? 'aktiv' : 'wartet'} srcDoc={LEER} />
@@ -140,14 +217,14 @@ function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: bo
   auswahlZeigen(dok, a.auswahl)
 }
 
-function seiteBauen(html: string, vaultCss: string[], titel: string, fassung: number): string {
+function seiteBauen(html: string, vaultCss: string[], titel: string, fassung: number, tinteSparen: boolean): string {
   const stil = (css: string) => `<style>${urlsAbsolut(css)}</style>`
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><title>${titel.replace(/</g, '&lt;')}</title>
 ${stil(SCHRIFTEN)}${stil(obsidianBasis)}${vaultCss.map(stil).join('')}${stil(druckCss)}
 <script>window.PagedConfig = { auto: true, after: () => parent.postMessage({ druckreif: 'fertig', fassung: ${fassung} }, '*') }</script>
 <script src="${pagedUrl}"></script>
-</head><body class="theme-light"><div class="markdown-preview-view markdown-rendered">${html}</div></body></html>`
+</head><body class="theme-light${tinteSparen ? ' tinte-sparen' : ''}"><div class="markdown-preview-view markdown-rendered">${html}</div></body></html>`
 }
 
 /**

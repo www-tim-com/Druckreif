@@ -3,13 +3,13 @@
 
 import type { Hinweis, Stufe } from '../hinweise'
 import { layoutAnwenden } from '../layout/zuordnen'
-import { type LayoutDatei, layoutLaden } from '../layout/layoutDatei'
-import { bilderFinden, markdownUmwandeln } from '../markdown/umwandeln'
+import { type LayoutDatei, layoutLaden, layoutPfad, leeresLayout } from '../layout/layoutDatei'
+import { bilderFinden, einbettungenFinden, markdownUmwandeln } from '../markdown/umwandeln'
 import { anhangOrdnerFuer, type VaultEinstellungen } from '../stil/stil'
-import { reihenfolgeLesen } from '../vault/notizen'
+import { frontmatterLesen, reihenfolgeLesen } from '../vault/notizen'
 import { type Vault, dateiFinden, dateiname, ohneEndung, ordner } from '../vault/vault'
 import type { MappenEintrag } from '../mappen/mappen'
-import { type Block, gliedern } from './bloecke'
+import { type Block, gliedern, normalisieren } from './bloecke'
 import { diagrammeZeichnen } from './diagramme'
 
 export interface NotizTeil {
@@ -113,8 +113,85 @@ async function notizAufbauen(
   const text = await vault.lesenText(pfad)
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
-  // Bilder vorab laden, weil markdown-it synchron arbeitet
-  const notizOrdner = ordner(pfad)
+  // Layout zuerst: es sagt, welche eingebetteten Notizen eingefügt werden
+  let layout: LayoutDatei
+  let layoutFehler: string | null = null
+  try {
+    layout = await layoutLaden(vault, pfad, name)
+  } catch (fehler) {
+    layoutFehler = (fehler as Error).message
+    layout = leeresLayout(pfad, name)
+  }
+  const einfuegen = new Set(Array.isArray(layout.settings.embeds) ? layout.settings.embeds : [])
+
+  // Bilder und eingebettete Notizen vorab laden, weil markdown-it synchron arbeitet
+  const bildUrls = await bilderLaden(vault, text, pfad, einstellungen, quellen)
+  const einbettungen = new Map<string, string | null>()
+  for (const ziel of einbettungenFinden(text)) {
+    if (einfuegen.has(ziel)) einbettungen.set(ziel, await einbettungAufbauen(vault, ziel, pfad, einstellungen, quellen, hinweis))
+  }
+
+  const html = markdownUmwandeln(
+    text,
+    {
+      bildUrl: (n) => bildUrls.get(n) ?? null,
+      hinweis,
+      einbettung: (ziel) => {
+        const inhalt = einbettungen.get(ziel)
+        // Nie stillschweigend weglassen: jede Einbettung steht in den Hinweisen, mit Knopf zum Umschalten
+        hinweise.push({
+          stufe: 'info',
+          notiz: pfad,
+          text: inhalt ? `Eingebettete Notiz „${ziel}“ eingefügt` : `Eingebettete Notiz „${ziel}“ nicht eingefügt`,
+          art: 'einbettung',
+          einbettung: { ziel, eingefuegt: einfuegen.has(ziel) },
+        })
+        return typeof inhalt === 'string'
+      },
+    },
+    einstellungen.strictLineBreaks,
+  )
+
+  const article = document.createElement('article')
+  article.className = 'notiz'
+  article.dataset.notiz = pfad
+  article.innerHTML = html
+  einbettungenEinsetzen(article, einbettungen)
+  const { titel, bloecke, weitereTitel } = gliedern(article, name, praefix)
+  for (const t of weitereTitel) hinweis('info', `Weitere #-Überschrift „${t}“ als Kapitel behandelt`)
+  if (!vault.dateien.includes(layoutPfad(pfad))) layout = { ...layout, title: titel }
+
+  let zuordnung = new Map<string, number>()
+  if (!layoutFehler) {
+    try {
+      const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
+      hinweise.push(...angewendet.hinweise)
+      zuordnung = angewendet.zuordnung
+    } catch (fehler) {
+      layoutFehler = `Layout-Datei ${layoutPfad(pfad)} ist ungültig (${(fehler as Error).message})`
+    }
+  }
+  if (layoutFehler) {
+    hinweis('rot', `${layoutFehler} – Änderungen an dieser Notiz sind gesperrt, bis die Datei repariert ist`)
+    layout = leeresLayout(pfad, titel)
+  }
+  if (eintrag.newPage === false) article.classList.add('anschliessen')
+  if (eintrag.sections) abschnitteAuswaehlen(article, eintrag.sections, hinweis)
+
+  const abschnitte = [...new Set(bloecke.filter((b) => b.typ === 'heading' && b.pfad.length === 2).map((b) => b.pfad[1]))]
+  const hatEinleitung = bloecke.some((b) => b.pfad.length === 1 && b.typ !== 'heading' && b.typ !== 'footnotes')
+  const layoutKaputt = layoutFehler !== null
+  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
+}
+
+async function bilderLaden(
+  vault: Vault,
+  text: string,
+  notizPfad: string,
+  einstellungen: VaultEinstellungen,
+  quellen: Map<string, number>,
+): Promise<Map<string, string | null>> {
+  const notizOrdner = ordner(notizPfad)
   const anhang = anhangOrdnerFuer(einstellungen.anhangOrdner, notizOrdner)
   const bildUrls = new Map<string, string | null>()
   for (const bild of bilderFinden(text)) {
@@ -127,39 +204,96 @@ async function notizAufbauen(
     quellen.set(treffer, zeit)
     bildUrls.set(bild, await bildUrl(vault, treffer, zeit))
   }
+  return bildUrls
+}
 
-  const html = markdownUmwandeln(
-    text,
-    { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis },
-    einstellungen.strictLineBreaks,
-  )
-
-  const article = document.createElement('article')
-  article.className = 'notiz'
-  article.dataset.notiz = pfad
-  article.innerHTML = html
-  const { titel, bloecke, weitereTitel } = gliedern(article, name, praefix)
-  for (const t of weitereTitel) hinweis('info', `Weitere #-Überschrift „${t}“ als Kapitel behandelt`)
-
-  let layout: LayoutDatei
-  let zuordnung = new Map<string, number>()
-  let layoutKaputt = false
-  try {
-    layout = await layoutLaden(vault, pfad, titel)
-    const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
-    hinweise.push(...angewendet.hinweise)
-    zuordnung = angewendet.zuordnung
-  } catch (fehler) {
-    hinweis('rot', `${(fehler as Error).message} – Änderungen an dieser Notiz sind gesperrt, bis die Datei repariert ist`)
-    layoutKaputt = true
-    layout = { version: 1, note: pfad, title: titel, settings: {}, items: [] }
+/**
+ * Inhalt einer eingebetteten Notiz als HTML (ganze Notiz oder ein #Abschnitt), oder null mit rotem Hinweis.
+ * Eingebettete Notizen darin werden nicht weiter eingefügt.
+ */
+async function einbettungAufbauen(
+  vault: Vault,
+  ziel: string,
+  notizPfad: string,
+  einstellungen: VaultEinstellungen,
+  quellen: Map<string, number>,
+  hinweis: (stufe: Stufe, text: string) => void,
+): Promise<string | null> {
+  const [name, ...anker] = ziel.split('#')
+  const abschnitt = anker.at(-1)?.trim()
+  if (abschnitt?.startsWith('^')) {
+    hinweis('rot', `Eingebettete Notiz „${ziel}“: Verweise auf einzelne Blöcke (^…) werden nicht unterstützt`)
+    return null
   }
-  if (eintrag.newPage === false) article.classList.add('anschliessen')
-  if (eintrag.sections) abschnitteAuswaehlen(article, eintrag.sections, hinweis)
+  const treffer = dateiFinden(vault, /\.md$/i.test(name) ? name.trim() : `${name.trim()}.md`, ordner(notizPfad), '')
+  if (typeof treffer !== 'string') {
+    const grund = treffer ? `mehrdeutig (${treffer.join(', ')})` : 'nicht gefunden'
+    hinweis('rot', `Eingebettete Notiz „${ziel}“ ${grund} – nicht eingefügt`)
+    return null
+  }
+  if (treffer === notizPfad) {
+    hinweis('rot', `Notiz „${ziel}“ bettet sich selbst ein – nicht eingefügt`)
+    return null
+  }
+  quellen.set(treffer, await stempel(vault, treffer))
+  let text = frontmatterLesen(await vault.lesenText(treffer)).rest
+  if (abschnitt) {
+    const teil = abschnittAusschneiden(text, abschnitt)
+    if (teil === null) {
+      hinweis('rot', `Eingebettete Notiz „${ziel}“: Abschnitt „${abschnitt}“ nicht gefunden – nicht eingefügt`)
+      return null
+    }
+    text = teil
+  }
+  const bildUrls = await bilderLaden(vault, text, treffer, einstellungen, quellen)
+  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks)
+}
 
-  const abschnitte = [...new Set(bloecke.filter((b) => b.typ === 'heading' && b.pfad.length === 2).map((b) => b.pfad[1]))]
-  const hatEinleitung = bloecke.some((b) => b.pfad.length === 1 && b.typ !== 'heading' && b.typ !== 'footnotes')
-  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
+/** Text ab der Überschrift `titel` bis vor die nächste Überschrift gleicher oder höherer Ebene (Codeblöcke beachtet). */
+export function abschnittAusschneiden(text: string, titel: string): string | null {
+  const zeilen = text.split(/\r?\n/)
+  let start = -1
+  let ebene = 0
+  let imCode = false
+  for (let i = 0; i < zeilen.length; i++) {
+    if (/^\s{0,3}(`{3,}|~{3,})/.test(zeilen[i])) imCode = !imCode
+    if (imCode) continue
+    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(zeilen[i])
+    if (!h) continue
+    if (start < 0 && normalisieren(h[2]) === normalisieren(titel)) {
+      start = i
+      ebene = h[1].length
+    } else if (start >= 0 && h[1].length <= ebene) {
+      return zeilen.slice(start, i).join('\n')
+    }
+  }
+  return start < 0 ? null : zeilen.slice(start).join('\n')
+}
+
+/**
+ * Platzhalter eingefügter Notizen durch ihren Inhalt ersetzen. Steht ein Platzhalter allein im Absatz (der Normalfall),
+ * ersetzt der Inhalt den Absatz; sonst kommt er direkt hinter den Absatz. Nicht eingefügte Platzhalter allein im Absatz
+ * bekommen einen Absatz ohne Höhe (kein Block, damit sich die Zählung der übrigen Blöcke nicht verschiebt).
+ */
+function einbettungenEinsetzen(article: HTMLElement, einbettungen: Map<string, string | null>) {
+  for (const platzhalter of [...article.querySelectorAll<HTMLElement>('span.einbettung')]) {
+    const absatz = platzhalter.parentElement
+    const allein = absatz?.tagName === 'P' && absatz.parentElement === article && !absatz.textContent?.trim() && absatz.querySelectorAll('img, span.einbettung').length === 1
+    const inhalt = einbettungen.get(platzhalter.dataset.ziel ?? '')
+    if (!platzhalter.classList.contains('eingefuegt') || typeof inhalt !== 'string') {
+      if (allein) absatz.classList.add('nur-einbettung')
+      continue
+    }
+    const div = article.ownerDocument.createElement('div')
+    div.className = 'markdown-embed einbettung-inhalt'
+    div.dataset.ziel = platzhalter.dataset.ziel
+    div.innerHTML = inhalt
+    if (allein) absatz.replaceWith(div)
+    else {
+      ;(absatz?.parentElement === article ? absatz : platzhalter).after(div)
+      platzhalter.remove()
+    }
+  }
 }
 
 /**

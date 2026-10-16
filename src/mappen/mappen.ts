@@ -17,6 +17,8 @@ export interface Mappe {
   id: string
   name: string
   items: MappenEintrag[]
+  /** Tinte sparen: Callouts und Tabellenköpfe ohne farbige Flächen */
+  inkSaving?: boolean
 }
 
 export interface MappenDatei {
@@ -66,6 +68,11 @@ export function mappeLoeschen(datei: MappenDatei, id: string): MappenDatei {
 }
 
 export const umbenennen = (name: string) => (m: Mappe): Mappe => ({ ...m, name: name.trim() || m.name })
+
+export const tinteSparenSetzen = (an: boolean) => (m: Mappe): Mappe => {
+  const { inkSaving: _alt, ...rest } = m
+  return an ? { ...rest, inkSaving: true } : rest
+}
 
 export const notizAnhaengen = (note: string) => (m: Mappe): Mappe => ({ ...m, items: [...m.items, { note }] })
 

@@ -77,6 +77,8 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     const zurNotiz = el.classList.contains('footnotes') || el.classList.contains('footnotes-sep')
     if (zurNotiz) wurzel.append(el)
     else if (ebene !== 1) stapel[stapel.length - 1].el.append(el)
+    // Platzhalter einer nicht eingefügten Notiz ist kein Block (sonst verschöbe er die Zählung der Absätze)
+    if (el.classList.contains('nur-einbettung')) continue
 
     const typ: BlockTyp = ebene ? 'heading' : blockTyp(el)
     const bildname = typ === 'image' ? el.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined
@@ -124,7 +126,7 @@ function blockTyp(el: HTMLElement): BlockTyp {
 
 function leereAbsaetzeEntfernen(wurzel: HTMLElement) {
   for (const p of wurzel.querySelectorAll('p')) {
-    if (!p.textContent?.trim() && !p.querySelector('img, .bild-fehlt, input, .katex')) p.remove()
+    if (!p.textContent?.trim() && !p.querySelector('img, .bild-fehlt, input, .katex, .einbettung')) p.remove()
   }
 }
 

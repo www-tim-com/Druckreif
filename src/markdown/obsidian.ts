@@ -58,6 +58,11 @@ export function dekodieren(text: string): string {
   }
 }
 
+/** Ziel einer eingebetteten Notiz aus dem Inhalt von ![[…]]: ohne |Anzeigetext, mit #Abschnitt. */
+export function einbettungsZiel(inhalt: string): string {
+  return inhalt.replace(/\\\|/g, '|').split('|')[0].trim()
+}
+
 /** Dateiname aus dem Inhalt von ![[…]]: ohne |Größe und ohne #Abschnitt (in Tabellen steht \| statt |). */
 export function bildZiel(inhalt: string): string {
   return inhalt.replace(/\\\|/g, '|').split('|')[0].split('#')[0].trim()
@@ -90,7 +95,12 @@ function wikilink(state: StateInline, silent: boolean): boolean {
       alt: groesse ? '' : anzeige,
     }
   } else if (einbettung) {
-    env.hinweis('info', `Eingebettete Notiz „${ziel}“ nicht eingefügt`)
+    // Platzhalter: aufbauen.ts ersetzt ihn durch den Inhalt oder lässt ihn als Hinweis auf dem Bildschirm stehen
+    const zielText = einbettungsZiel(ziel)
+    const eingefuegt = env.einbettung?.(zielText) ?? false
+    if (!env.einbettung) env.hinweis('info', `Eingebettete Notiz „${zielText}“ in einer eingebetteten Notiz – nicht eingefügt`)
+    const token = state.push('html_inline', '', 0)
+    token.content = `<span class="einbettung${eingefuegt ? ' eingefuegt' : ''}${env.einbettung ? '' : ' verschachtelt'}" data-ziel="${state.md.utils.escapeHtml(zielText)}"></span>`
   } else {
     // Link wird normaler Text: Anzeigetext, sonst Notizname ohne #Abschnitt
     const text = state.push('text', '', 0)

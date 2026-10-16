@@ -6,7 +6,8 @@ import footnote from 'markdown-it-footnote'
 import mark from 'markdown-it-mark'
 import katex from '@vscode/markdown-it-katex'
 import type { Stufe } from '../hinweise'
-import { bildZiel, dekodieren, obsidianPlugin } from './obsidian'
+import { bildZiel, dekodieren, einbettungsZiel, obsidianPlugin } from './obsidian'
+import { BILD_ENDUNGEN, endung } from '../vault/vault'
 import { vorbereiten } from './vorbereiten'
 
 /** Wird an markdown-it als `env` durchgereicht. */
@@ -14,6 +15,11 @@ export interface UmwandelKontext {
   /** URL eines Bildes per Dateiname, oder null wenn nicht (eindeutig) gefunden */
   bildUrl(name: string): string | null
   hinweis(stufe: Stufe, text: string): void
+  /**
+   * Eingebettete Notiz ![[Ziel]]: true = wird eingefügt (Inhalt setzt aufbauen.ts an die Stelle des Platzhalters),
+   * false = nur Platzhalter; fehlt = verschachtelte Einbettung (wird nie eingefügt).
+   */
+  einbettung?(ziel: string): boolean
 }
 
 // CommonJS-Paket: je nach Bundler steckt das Plugin in .default
@@ -48,6 +54,16 @@ export function bilderFinden(text: string): string[] {
     if (!/^[a-z]+:/i.test(ziel)) namen.add(dekodieren(ziel))
   }
   return [...namen]
+}
+
+/** Ziele eingebetteter Notizen (nicht Bilder), wie in der Notiz geschrieben, z. B. „Asthma bronchiale#Therapie“. */
+export function einbettungenFinden(text: string): string[] {
+  const ziele = new Set<string>()
+  for (const t of text.matchAll(/!\[\[(.+?)\]\]/g)) {
+    const ziel = einbettungsZiel(t[1])
+    if (!BILD_ENDUNGEN.includes(endung(bildZiel(ziel)))) ziele.add(ziel)
+  }
+  return [...ziele]
 }
 
 export function markdownUmwandeln(text: string, kontext: UmwandelKontext, strictLineBreaks: boolean): string {

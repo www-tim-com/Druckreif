@@ -1,14 +1,17 @@
-// Navigationsbereich links (wie in Word): Notizen wählen oder durch die Überschriften des Dokuments springen.
+// Navigationsbereich links (wie in Word): Dokument durchsuchen, Notizen wählen, durch Überschriften oder Seiten springen.
 
-import { X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import type { RefObject } from 'react'
+import type { Treffer } from '../vorschau/suche'
 import type { Notiz } from '../vault/notizen'
 import type { NotizTeil } from '../dokument/aufbauen'
 import type { Mappe, MappenEintrag } from '../mappen/mappen'
 import { Gliederung } from './Gliederung'
 import { MappeBereich } from './MappeBereich'
 import { Seitenleiste } from './Seitenleiste'
+import { Seitenminiaturen } from './Seitenminiaturen'
 
-export type NavAnsicht = 'mappe' | 'notizen' | 'gliederung'
+export type NavAnsicht = 'mappe' | 'notizen' | 'gliederung' | 'seiten'
 
 interface Props {
   ansicht: NavAnsicht
@@ -26,6 +29,21 @@ interface Props {
   onSprung(blockId: string): void
   onAusblenden(blockId: string, ausblenden: boolean): void
   onSchliessen(): void
+
+  suchfeld: RefObject<HTMLInputElement | null>
+  suche: string
+  onSuche(begriff: string): void
+  treffer: Treffer[]
+  trefferAktiv: number
+  onTreffer(index: number): void
+  onTrefferWechseln(schritt: number): void
+
+  seite: number
+  seiten: number
+  leerraumSeiten: number[]
+  fassung: number
+  miniaturHtml(): string | null
+  onSeite(nummer: number): void
 }
 
 export function Navigationsbereich(p: Props) {
@@ -39,6 +57,38 @@ export function Navigationsbereich(p: Props) {
           <X size={14} />
         </button>
       </header>
+      <div className="dokumentsuche">
+        <Search size={14} />
+        <input
+          ref={p.suchfeld}
+          type="search"
+          placeholder="Dokument durchsuchen"
+          title="Im Dokument suchen (Strg+F) – Enter: nächster, Umschalt+Enter: vorheriger Treffer"
+          value={p.suche}
+          onChange={(e) => p.onSuche(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') p.onTrefferWechseln(e.shiftKey ? -1 : 1)
+            else if (e.key === 'Escape') p.onSuche('')
+            else return
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        />
+        {p.suche.trim().length >= 2 && (
+          <>
+            <button onClick={() => p.onTrefferWechseln(-1)} disabled={p.treffer.length === 0} aria-label="Vorheriger Treffer">
+              <ChevronUp size={14} />
+            </button>
+            <button onClick={() => p.onTrefferWechseln(1)} disabled={p.treffer.length === 0} aria-label="Nächster Treffer">
+              <ChevronDown size={14} />
+            </button>
+          </>
+        )}
+      </div>
+      {p.suche.trim().length >= 2 ? (
+        <Suchergebnisse {...p} />
+      ) : (
+        <>
       <div className="nav-reiter">
         <button className={ansicht === 'mappe' ? 'gewaehlt' : ''} onClick={() => setAnsicht('mappe')}>
           Mappe{p.mappe ? ` (${p.mappe.items.length})` : ''}
@@ -48,6 +98,9 @@ export function Navigationsbereich(p: Props) {
         </button>
         <button className={ansicht === 'gliederung' ? 'gewaehlt' : ''} onClick={() => setAnsicht('gliederung')}>
           Überschriften
+        </button>
+        <button className={ansicht === 'seiten' ? 'gewaehlt' : ''} onClick={() => setAnsicht('seiten')}>
+          Seiten
         </button>
       </div>
       {ansicht === 'mappe' &&
@@ -69,6 +122,37 @@ export function Navigationsbereich(p: Props) {
       {ansicht === 'gliederung' && (
         <Gliederung teile={p.teile} auswahl={p.auswahl} onSprung={p.onSprung} onAusblenden={p.onAusblenden} />
       )}
+      {ansicht === 'seiten' && (
+        <Seitenminiaturen fassung={p.fassung} miniaturHtml={p.miniaturHtml} seite={p.seite} leerraumSeiten={p.leerraumSeiten} onSeite={p.onSeite} />
+      )}
+        </>
+      )}
     </aside>
+  )
+}
+
+function Suchergebnisse({ treffer, trefferAktiv, onTreffer }: Props) {
+  return (
+    <div className="suchergebnisse">
+      <div className="anzahl">
+        {treffer.length === 0 ? 'Keine Treffer' : `${trefferAktiv + 1} von ${treffer.length}${treffer.length >= 500 ? '+' : ''} Treffern`}
+      </div>
+      <ul>
+        {treffer.map((t, i) => (
+          <li key={i}>
+            <button className={i === trefferAktiv ? 'gewaehlt' : ''} onClick={() => onTreffer(i)}>
+              <span className="fundstelle">
+                {t.vorher && '…'}
+                {t.vorher}
+                <mark>{t.text}</mark>
+                {t.nachher}
+                {t.nachher && '…'}
+              </span>
+              <span className="seite">Seite {t.seite}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

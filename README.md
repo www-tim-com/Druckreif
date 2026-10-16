@@ -39,7 +39,9 @@ Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten
    Snippets. Der Vault wird nur gebraucht, damit der Editor Bilder, Theme und Layout-Dateien findet.
 2. **Mappen** sind deine Dokumente: eine benannte Zusammenstellung von Notizen, gespeichert in `.lernzettel/mappen.json`.
    Offene Mappen stehen als **Reiter** über den Seiten (Doppelklick = umbenennen, „+“ = neue Mappe, × = schließen).
-3. **Navigation › Notizen:** Klick auf eine Notiz hängt sie an die aktive Mappe (steht sie schon drin: Sprung dorthin).
+3. **Dokument durchsuchen** (Strg+F, oben im Navigationsbereich): Treffer werden auf den Seiten markiert und mit
+   Seitenzahl aufgelistet; Enter/F3 = nächster, Umschalt+Enter/Umschalt+F3 = vorheriger Treffer, Esc leert die Suche.
+   **Navigation › Notizen:** Klick auf eine Notiz hängt sie an die aktive Mappe (steht sie schon drin: Sprung dorthin).
    Das Ordner-Symbol beim Darüberfahren öffnet die Notiz in einer neuen Mappe. Suche nach Titel, Filter nach
    Frontmatter (`lernfeld: 3`). Notizen mit ☰ sind Reihenfolgedateien aus Obsidian und stehen für ihre Notizen.
 4. **Navigation › Mappe:** Reihenfolge per Ziehen, × entfernt. Pro Notiz: Seiten-Symbol = beginnt auf **neuer Seite**
@@ -47,6 +49,7 @@ Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten
    immer in den Hinweisen.
 5. **Navigation › Überschriften:** Klick springt zur Stelle. Das **Auge** blendet einen ganzen Abschnitt im Druck aus,
    z. B. „Quellen“. Ausgeblendetes steht immer in den Hinweisen und lässt sich dort wieder einblenden.
+   **Navigation › Seiten:** Miniaturen aller Seiten, Klick springt hin; ⚠ markiert halb leere Seiten.
 6. **Auf der Seite:** Block anklicken = auswählen, **Rechtsklick** = Kontextmenü (Seitenumbruch, ausblenden, Bild ausrichten, zurücksetzen).
    - **Bilder:** anklicken → Registerkarte **Bildformat**. Ecke ziehen = Größe, Bild ziehen = verschieben
      (links/mittig/rechts, nach unten). Breite in mm, Ausrichtung, „Text daneben“, Abstand oben, Bild zurücksetzen.
@@ -54,16 +57,27 @@ Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten
      Ausrichtung, Spalten automatisch, Schriftgröße, kompakte Zeilen, „Über Seiten teilen“, Tabelle zurücksetzen.
 7. **Start:** Rückgängig/Wiederholen, **Schriftgröße und Zeilenabstand** der Auswahl (ohne Auswahl: der Notiz), Block
    im Druck ausblenden, Seitenumbruch, **Aktualisieren** (F5), Drucken.
-8. **Layout:** Seitenumbruch davor erzwingen/verhindern/automatisch, Abstand vor/nach in mm, Block zurücksetzen,
-   Grundschrift und Zeilenabstand der Notiz, Layout der Notiz zurücksetzen.
+8. **Layout:** Seitenumbruch davor erzwingen/verhindern/automatisch, **Teilen erlauben** (Abschnitt, Liste, Callout,
+   Codeblock oder Tabelle darf über Seiten laufen), Abstand vor/nach in mm, Block zurücksetzen, Grundschrift und
+   Zeilenabstand der Notiz, Layout der Notiz zurücksetzen. Gruppe **Mappe:**
+   - **Automatisch formatieren:** Seitenzahl eingeben – die größte Grundschrift (12–8 pt, Zeilenabstand passend), bei der
+     alles auf diese Seitenzahl passt, wird ausprobiert und als normale Notiz-Einstellung gespeichert. Danach frei
+     änderbar; Strg+Z nimmt es für alle Notizen in einem Schritt zurück.
+   - **Tinte sparen:** Callouts und Tabellenköpfe ohne farbige Flächen, in Graustufen (pro Mappe gespeichert).
 9. **Ansicht:** Zoom, Navigation und Hinweise ein/aus, „Umbrüche zeigen“, Aktualisieren.
 10. **Aktualisieren** (F5): liest den Vault neu ein – geänderte Notizen, neue/verschobene/ersetzte Bilder, Theme,
-    Snippets, Mappen. Gespeicherte Notizen werden zusätzlich alle 2 s automatisch erkannt.
+    Snippets, Mappen. Geänderte Notizen und Bilder werden zusätzlich alle 1,5 s automatisch erkannt.
 11. **Drucken / PDF** (Strg+P): Druckdialog des Browsers, Ziel „Als PDF speichern“, Ränder „Standard“,
    Kopf-/Fußzeilen des Browsers aus. Dateiname = Name der Mappe.
 12. **Hinweise** (Statusleiste oder Ansicht): entfernte Plugin-Blöcke, fehlende Bilder, ausgeblendete Abschnitte,
    gelb/rot für Layout-Einträge, die nach einer Textänderung unsicher oder gar nicht zugeordnet wurden.
    Rote Einträge: „Zuweisen …“ und dann den richtigen Block anklicken, oder „Löschen“.
+   - **Leerraum:** Seiten, die zu mindestens 40 % leer bleiben, weil die nächste Seite mit einem Umbruch beginnt, sind auf
+     der Seite schraffiert und stehen hier – mit passendem Knopf: „Umbruch entfernen“ (manueller Umbruch), „Notiz direkt
+     anschließen“, „Teilen erlauben“/„Tabelle teilen“ (Einheit, die am Stück bleiben sollte) oder „Bild auswählen“.
+   - **Eingebettete Notizen** `![[Notiz]]` bzw. `![[Notiz#Abschnitt]]` werden nicht automatisch eingefügt. Auf der Seite
+     steht an der Stelle ein Hinweis (nur Bildschirm); Klick darauf oder „Einfügen“ in den Hinweisen fügt den Inhalt ein,
+     „Nicht einfügen“ nimmt ihn wieder heraus. Die Wahl steht in der Layout-Datei der Notiz.
 
 Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsidian, aktualisiert sich die Ansicht von selbst.
 
@@ -73,6 +87,7 @@ Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsi
 | Strg+Enter | Seitenumbruch vor dem gewählten Block an/aus |
 | Entf | gewählten Block (bei Überschrift: ganzen Abschnitt) im Druck ausblenden |
 | Strg+P | Drucken / PDF |
+| Strg+F, F3 | Dokument durchsuchen, nächster Treffer |
 | F5 | Aktualisieren |
 | Esc | Auswahl aufheben |
 
@@ -82,7 +97,7 @@ Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsi
 | --- | --- | --- |
 | 1 | Grundgerüst: Vault, Notizliste, Obsidian-HTML, Theme/Snippets | fertig |
 | 2 | Seiten: Paged.js, Druck-Stylesheet, PDF über Druckdialog | fertig, Vergleich mit `_Referenz.pdf` steht aus |
-| 3 | Automatisches Layout | teilweise: Abschnitte, Kapitel ohne ###, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum-Regel und gezielte Teilung überlanger Einheiten (Messen) fehlen |
+| 3 | Automatisches Layout | Abschnitte, Kapitel ohne ###, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum wird gemessen und gemeldet (Beheben per Knopf), „Automatisch formatieren“ auf N Seiten; automatische Teilung ohne Nachfrage fehlt |
 | 4 | Nachjustieren | fertig: Bilder ziehen/skalieren/ausrichten/Textfluss, Umbrüche, Abstände, Schriftgröße, Ausblenden, automatisches Speichern |
 | 5 | Verankerung | fertig: Fingerabdrücke, Zuordnung still/gelb/rot, Hinweisliste mit Zuweisen/Löschen, Neu laden |
 | 6 | Feinschliff | Mappen mit Reitern (Auszüge, direkt anschließen), Aktualisieren, Tabellen, Schrift/Zeilenabstand, Reihenfolgedatei, Rückgängig/Wiederholen, Zurücksetzen (Block/Notiz) fertig; Treueprüfung und „Seite zurücksetzen“ fehlen |
@@ -130,8 +145,9 @@ demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisun
 - **Schrift:** Noto Sans ist eingestellt (Variable `--druck-schrift` in `src/stil/druck.css`). Klären, ob stattdessen „Anthropic Serif“ gilt.
 - **Emojis:** es wird die Emoji-Schrift von Windows genutzt, Noto Color Emoji ist nicht eingebunden.
 - **Callout-Icons** fehlen noch (nur Titel).
-- **Erweiterungen des Layout-Formats:** `hidden`, `fontSizePt`/`lineHeight` am Block, `settings.lineHeight`,
-  `table` (`widthPct`, `align`, `columnsPct`, `fontSizePt`, `compact`, `split`). Ältere Dateien bleiben gültig.
+- **Erweiterungen des Layout-Formats:** `hidden`, `fontSizePt`/`lineHeight` am Block, `split` am Block,
+  `settings.lineHeight`, `settings.embeds` (eingefügte Notizen), `table` (`widthPct`, `align`, `columnsPct`, `fontSizePt`,
+  `compact`, `split`). Ältere Dateien bleiben gültig. In `mappen.json`: `inkSaving` pro Mappe.
 - **Tabellen über Seiten:** Paged.js wiederholt die Kopfzeile auf der Folgeseite nicht zuverlässig.
 - **Ausblenden und Auszüge** nehmen Inhalt aus dem Druck – nur auf ausdrücklichen Wunsch. Ausgeblendetes erscheint immer
   in den Hinweisen, damit nie unbemerkt Inhalt fehlt.
