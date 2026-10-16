@@ -7,12 +7,21 @@ import { spaltenSetzen } from '../layout/zuordnen'
 
 export type Ausrichtung = 'left' | 'center' | 'right'
 
+/** Block, an dem ein umfließendes Bild abgelegt wurde (wie in Word am Absatz verankert) */
+export interface Bezug {
+  block: string
+  versatzMm: number
+}
+
 export interface Rueckrufe {
   auswahl(id: string | null): void
   kontext(id: string, x: number, y: number): void
   bildGroesse(id: string, breiteMm: number): void
-  /** neue Ausrichtung und Verschiebung nach unten (mm, relativ zur bisherigen Lage) */
-  bildVerschieben(id: string, ausrichtung: Ausrichtung, versatzMm: number): void
+  /**
+   * neue Ausrichtung und Verschiebung nach unten (mm, relativ zur bisherigen Lage); bei umfließenden Bildern
+   * zusätzlich der Block, an dem die Oberkante abgelegt wurde, und wie weit unter dessen Anfang (mm)
+   */
+  bildVerschieben(id: string, ausrichtung: Ausrichtung, versatzMm: number, bezug?: Bezug): void
   tabelleSpalten(id: string, prozent: number[]): void
   tabelleBreite(id: string, prozent: number): void
   taste(e: KeyboardEvent): void
@@ -248,13 +257,43 @@ function verschieben(dok: Document, figure: HTMLElement, start: PointerEvent, ru
     figure.style.transform = ''
     figure.style.opacity = ''
     if (!bewegt) return
-    // Ausrichtung nach der Lage der Bildmitte im Satzspiegel: linkes, mittleres oder rechtes Drittel
     const img = figure.querySelector('img')!.getBoundingClientRect()
     const flaeche = inhalt.getBoundingClientRect()
     const anteil = (img.left + img.width / 2 + dxMm * faktor - flaeche.left) / flaeche.width
+    const id = figure.dataset.block!
+    if (figure.classList.contains('umfliessen')) {
+      // Umfließend: linke oder rechte Hälfte, verankert am Block unter der neuen Oberkante; Text fließt neu herum
+      const bezug = bezugFinden(dok, id, img.top + dyMm * faktor)
+      const ausrichtung: Ausrichtung = anteil < 1 / 2 ? 'left' : 'right'
+      rueckrufe().bildVerschieben(id, ausrichtung, Math.round(dyMm), bezug ? { block: bezug.block, versatzMm: bezug.versatzPx / faktor } : undefined)
+      return
+    }
+    // Ausrichtung nach der Lage der Bildmitte im Satzspiegel: linkes, mittleres oder rechtes Drittel
     const ausrichtung: Ausrichtung = anteil < 1 / 3 ? 'left' : anteil > 2 / 3 ? 'right' : 'center'
-    rueckrufe().bildVerschieben(figure.dataset.block!, ausrichtung, Math.round(dyMm))
+    rueckrufe().bildVerschieben(id, ausrichtung, Math.round(dyMm))
   })
+}
+
+/**
+ * Block, auf dessen Höhe `y` (Bildschirm-Pixel) liegt: der zuletzt davor beginnende, das Bild selbst ausgenommen.
+ * Der Versatz (px) zählt bei über Seiten geteilten Blöcken die Teile auf den Seiten davor mit.
+ */
+function bezugFinden(dok: Document, bildId: string, y: number): { block: string; versatzPx: number } | null {
+  let bester: HTMLElement | null = null
+  let besteOben = -Infinity
+  for (const el of dok.querySelectorAll<HTMLElement>('.pagedjs_page_content [data-block]')) {
+    if (el.dataset.block === bildId || el.parentElement?.closest('[data-block]')) continue
+    const oben = el.getBoundingClientRect().top
+    if (oben <= y && oben >= besteOben) [bester, besteOben] = [el, oben]
+  }
+  if (!bester) return null
+  const block = bester.dataset.block!
+  let versatz = y - besteOben
+  for (const teil of dok.querySelectorAll<HTMLElement>(`[data-block="${block}"]`)) {
+    if (teil === bester) break
+    versatz += teil.getBoundingClientRect().height
+  }
+  return { block, versatzPx: versatz }
 }
 
 function ziehen(

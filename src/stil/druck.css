@@ -166,13 +166,45 @@ section.unterabschnitt.teilbar,
 }
 figure[data-ausrichtung='center'] img { margin-inline: auto; }
 figure[data-ausrichtung='right'] img { margin-inline-start: auto; }
-/* Textfluss daneben: Bild schwebt, folgender Text des Abschnitts fließt herum */
-figure.umfliessen { width: fit-content; max-width: 60%; }
+/*
+ * Textumbruch wie in Word („Quadrat“): das Bild schwebt links oder rechts, der folgende Text des Abschnitts
+ * fließt herum und wird neu umbrochen. Abstand zum Text über --umfluss-abstand. Steht das Bild tiefer im
+ * Absatz, hält ein Float ohne Breite davor die Höhe frei (.umfluss-abstand, zuordnen.ts).
+ */
+.markdown-rendered figure.bild-block.umfliessen {
+  float: right;
+  width: fit-content;
+  max-width: 75%;
+  margin: 0 0 var(--umfluss-abstand, 4mm) var(--umfluss-abstand, 4mm);
+}
+.markdown-rendered figure.bild-block.umfliessen[data-ausrichtung='left'] {
+  float: left;
+  margin: 0 var(--umfluss-abstand, 4mm) var(--umfluss-abstand, 4mm) 0;
+}
+.markdown-rendered figure.bild-block.umfliessen[data-ausrichtung='center'] {
+  float: none;
+  margin-inline: auto;
+}
+.umfluss-abstand { float: right; width: 0; }
+.umfluss-abstand[data-ausrichtung='left'] { float: left; }
+figure.umfliessen.nach-abstand { clear: right; }
+figure.umfliessen.nach-abstand[data-ausrichtung='left'] { clear: left; }
 figure.umfliessen img { max-width: 100%; }
-figure.umfliessen,
-figure.umfliessen[data-ausrichtung='right'] { float: right; margin-inline-start: 5mm; }
-figure.umfliessen[data-ausrichtung='left'] { float: left; margin-inline: 0 5mm; }
-figure.umfliessen[data-ausrichtung='center'] { float: none; margin-inline: auto; }
+/* Beschriftung so breit wie das Bild (bricht um, statt das Bild breiter zu machen) */
+figure.umfliessen figcaption { width: 0; min-width: 100%; }
+/* Kästen und Listen neben dem Bild weichen aus, statt darunter zu liegen (Hintergrund, Rahmen, Aufzählungszeichen) */
+figure.umfliessen ~ .callout,
+figure.umfliessen ~ pre,
+figure.umfliessen ~ blockquote,
+figure.umfliessen ~ .mermaid-diagramm,
+figure.umfliessen ~ hr {
+  display: flow-root;
+}
+/* Aufzählungszeichen stehen links vor dem Text: neben einem linken Bild weicht die ganze Liste aus */
+figure.umfliessen[data-ausrichtung='left'] ~ ul,
+figure.umfliessen[data-ausrichtung='left'] ~ ol {
+  display: flow-root;
+}
 section::after { content: ''; display: block; clear: both; }
 
 .mermaid-diagramm svg {

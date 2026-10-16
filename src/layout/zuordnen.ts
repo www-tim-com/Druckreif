@@ -110,11 +110,45 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
       ausblenden.push(abschnittOderBlock(el))
     } else {
       eintragAnwenden(el, eintrag)
+      const bild = eintrag.image
+      if (bild?.wrap) {
+        const melden = (text: string) => hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `${text}: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung', block })
+        if (bild.before) bildVersetzen(wurzel, el, bild.before, bloecke, melden)
+        if (bild.offsetYMm && bild.offsetYMm > 0) umflussAbstand(el, bild.offsetYMm)
+      }
     }
   })
   // Erst am Ende entfernen, damit verschachtelte Blöcke vorher noch gefunden werden
   for (const el of ausblenden) el.remove()
   return { hinweise, zuordnung }
+}
+
+/**
+ * Umfließendes Bild vor seinen Bezugsblock setzen (nur innerhalb desselben Abschnitts, damit Ausblenden und
+ * Auszüge weiter für das Bild gelten). Ohne Bezugsblock bleibt das Bild an seiner Stelle in der Notiz.
+ */
+function bildVersetzen(wurzel: HTMLElement, bild: HTMLElement, anker: Anker, bloecke: Block[], melden: (text: string) => void) {
+  const treffer = blockFinden(anker, bloecke)
+  const ziel = treffer && wurzel.querySelector<HTMLElement>(`[data-block="${treffer.block.id}"]`)
+  if (!ziel || ziel === bild || ziel.parentElement !== bild.parentElement) {
+    melden('Bild steht an der ursprünglichen Stelle, Bezugsabsatz nicht gefunden')
+    return
+  }
+  if (!treffer.sicher) melden('Bildposition unsicher zugeordnet')
+  ziel.before(bild)
+}
+
+/**
+ * Umfließendes Bild tiefer im Absatz: ein unsichtbarer Float ohne Breite davor hält die Höhe frei, das Bild steht
+ * darunter (clear). Der Text fließt über dem Bild in voller Breite; Kästen daneben weichen nur dem Bild aus.
+ */
+function umflussAbstand(bild: HTMLElement, mm: number) {
+  const platz = bild.ownerDocument.createElement('div')
+  platz.className = 'umfluss-abstand'
+  platz.dataset.ausrichtung = bild.dataset.ausrichtung === 'left' ? 'left' : 'right'
+  platz.style.height = `${mm}mm`
+  bild.before(platz)
+  bild.classList.add('nach-abstand')
 }
 
 /** Bei einer Überschrift am Anfang ihres Abschnitts gilt eine Änderung für den ganzen Abschnitt. */
@@ -169,8 +203,10 @@ function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
       img.style.maxHeight = 'none'
     }
     if (bild.align) el.dataset.ausrichtung = bild.align
-    if (bild.wrap) el.classList.add('umfliessen')
-    if (bild.offsetYMm !== undefined) el.style.marginTop = `${bild.offsetYMm}mm`
+    if (bild.wrap) {
+      el.classList.add('umfliessen')
+      if (bild.wrapGapMm !== undefined) el.style.setProperty('--umfluss-abstand', `${bild.wrapGapMm}mm`)
+    } else if (bild.offsetYMm !== undefined) el.style.marginTop = `${bild.offsetYMm}mm`
   }
 }
 

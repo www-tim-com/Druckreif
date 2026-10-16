@@ -52,6 +52,10 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
 - Seitenminiaturen sind eine Kopie des umbrochenen DOM ohne `<script>` (sonst bricht Paged.js erneut um).
 - Eingebettete Notizen: Platzhalter `span.einbettung` aus dem Wikilink-Renderer; `aufbauen.ts` ersetzt ihn durch den
   Inhalt (eigener Block) oder lässt ihn in einem `p.nur-einbettung` ohne Höhe stehen, das kein Block ist.
+- Textumbruch um Bilder (`image.wrap`) ist ein CSS-Float. Kästen daneben (Callout, Code) brauchen `display: flow-root`,
+  sonst liegt ihr Hintergrund unter dem Bild; solche Blöcke weichen dem ganzen Float aus, nicht nur dem Bild. Deshalb
+  „tiefer im Absatz“ als unsichtbarer Float ohne Breite davor (`.umfluss-abstand`) + `clear`, nicht als Innenabstand.
+  `image.before` verankert das Bild an einem Block desselben Abschnitts (beim Ziehen gesetzt).
 - Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`) – nie überschreiben.
 
 ## Prüfen

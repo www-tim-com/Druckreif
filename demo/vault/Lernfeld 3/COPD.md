@@ -8,6 +8,27 @@ Diese Notiz hat keine Titelzeile, deshalb wird der Dateiname zum Titel.
 
 **C**hronic **O**bstructive **P**ulmonary **D**isease: dauerhafte, nicht vollständig reversible Verengung der Atemwege.
 
+## Pathophysiologie
+
+![[Lunge.png|170]]
+*Abb.: Bild auswählen und im Menüband „Text umfließt“ wählen*
+
+Durch die chronische Entzündung der Bronchien verdicken sich die Bronchialwände, die Schleimproduktion nimmt zu und die Flimmerhärchen arbeiten schlechter. Der Schleim bleibt liegen und begünstigt wiederkehrende Infekte.
+
+Beim **Lungenemphysem** werden die Alveolarwände zerstört. Die Gasaustauschfläche wird kleiner, die Lunge verliert an Elastizität. Bei der Ausatmung fallen die kleinen Atemwege zusammen, die Luft bleibt in der Lunge gefangen (Überblähung, „Air Trapping“).
+
+Typische Folgen:
+
+- Belastungsdyspnoe, später Ruhedyspnoe
+- produktiver Husten, besonders morgens
+- Fassthorax und verlängertes Exspirium
+- Lippenbremse als Selbsthilfe
+
+> [!warning] Exazerbation
+> Zunahme von Atemnot, Husten oder Sputum über das übliche Maß hinaus – frühzeitig ärztlich abklären.
+
+Langfristig kann die Hypoxie zu einer pulmonalen Hypertonie und einer Rechtsherzbelastung (Cor pulmonale) führen.
+
 ## Besonderheiten
 
 > [!note]

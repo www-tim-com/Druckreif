@@ -30,8 +30,14 @@ export interface Anker {
 export interface BildLayout {
   widthMm?: number
   align?: 'left' | 'center' | 'right'
+  /** Textumbruch wie in Word („Quadrat“): Bild schwebt links oder rechts, der Text des Abschnitts fließt herum */
   wrap?: boolean
+  /** bei wrap: Abstand des Bildes unter dem Anfang seines Bezugsblocks (Text fließt darüber), sonst Abstand oben */
   offsetYMm?: number
+  /** Erweiterung, nur bei wrap: Abstand zwischen Bild und umfließendem Text (sonst 4 mm) */
+  wrapGapMm?: number
+  /** Erweiterung, nur bei wrap: Bild steht vor diesem Block desselben Abschnitts (wie in Word an einem Absatz verankert) */
+  before?: Anker
 }
 
 /** Erweiterung: Tabellen anpassen */
