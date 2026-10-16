@@ -10,7 +10,7 @@ export async function diagrammeZeichnen(container: HTMLElement, fehler: (text: s
   const mermaid = (await import('mermaid')).default
   if (zaehler === 0) mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' })
   for (const el of diagramme) {
-    const quelle = el.dataset.quelle ?? ''
+    const quelle = decodeURIComponent(el.dataset.quelle ?? '')
     try {
       let svg = fertig.get(quelle)
       if (!svg) {

@@ -2,7 +2,7 @@
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen } from './dokument/aufbauen'
+import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen, stempel } from './dokument/aufbauen'
 import type { Block } from './dokument/bloecke'
 import type { Hinweis } from './hinweise'
 import {
@@ -265,16 +265,30 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geladen, mappenSchluessel, stand])
 
-  // Neu laden, wenn eine Notiz in Obsidian gespeichert wurde
+  // Neu laden, wenn eine Notiz oder ein Bild in Obsidian geändert wurde. Verglichen wird mit dem Stand beim
+  // Aufbau, damit auch ein Speichern während des Aufbaus auffällt. Die Dateiliste wird mit eingelesen:
+  // ein neu eingefügtes Bild („Pasted image …“) gibt es sonst noch nicht.
   useEffect(() => {
     if (!geladen || !dokument) return
-    const pfade = dokument.notizen.map((n) => n.pfad)
-    let letzter: number | null = null
+    const bekannt = new Map(dokument.quellen)
+    let laeuft = false
     const timer = setInterval(async () => {
-      const zeit = Math.max(...(await Promise.all(pfade.map((p) => geladen.vault.geaendertAm(p).catch(() => 0)))))
-      if (letzter !== null && zeit !== letzter) setStand((s) => s + 1)
-      letzter = zeit
-    }, 2000)
+      if (laeuft) return
+      laeuft = true
+      try {
+        const pfade = [...bekannt.keys()]
+        const zeiten = await Promise.all(pfade.map((p) => stempel(geladen.vault, p)))
+        const geaendert = pfade.filter((p, i) => zeiten[i] !== bekannt.get(p))
+        if (geaendert.length === 0) return
+        geaendert.forEach((p) => bekannt.set(p, zeiten[pfade.indexOf(p)]))
+        await geladen.vault.aktualisieren()
+        setStand((s) => s + 1)
+      } catch (e) {
+        setFehler((e as Error).message)
+      } finally {
+        laeuft = false
+      }
+    }, 1500)
     return () => clearInterval(timer)
   }, [geladen, dokument])
 
@@ -314,9 +328,17 @@ export function App() {
     return layouts.current.get(teil.pfad) ?? teil.layout
   }
 
+  /** Beschädigte Layout-Datei nie überschreiben – sonst wären alle bisherigen Einträge darin verloren. */
+  function layoutGesperrt(pfad: string): boolean {
+    const teil = dokument?.notizen.find((n) => n.pfad === pfad)
+    if (!teil?.layoutKaputt) return false
+    setFehler(`Die Layout-Datei von „${teil.titel}“ ist beschädigt. Bitte reparieren oder löschen, dann Aktualisieren (F5).`)
+    return true
+  }
+
   function layoutAendern(pfad: string, aendern: (l: LayoutDatei) => LayoutDatei) {
     const teil = dokument?.notizen.find((n) => n.pfad === pfad)
-    if (!teil) return
+    if (!teil || layoutGesperrt(pfad)) return
     const vorher = layoutVon(teil)
     const nachher = aendern(vorher)
     if (JSON.stringify(vorher) === JSON.stringify(nachher)) return
@@ -326,14 +348,14 @@ export function App() {
 
   function zurueck() {
     const schritt = verlauf.zurueck.at(-1)
-    if (!schritt) return
+    if (!schritt || layoutGesperrt(schritt.pfad)) return
     setVerlauf((v) => ({ zurueck: v.zurueck.slice(0, -1), vor: [...v.vor, schritt] }))
     versuchen(() => layoutSchreiben(schritt.vorher))
   }
 
   function vor() {
     const schritt = verlauf.vor.at(-1)
-    if (!schritt) return
+    if (!schritt || layoutGesperrt(schritt.pfad)) return
     setVerlauf((v) => ({ zurueck: [...v.zurueck, schritt], vor: v.vor.slice(0, -1) }))
     versuchen(() => layoutSchreiben(schritt.nachher))
   }

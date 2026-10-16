@@ -102,6 +102,10 @@
 }
 
 @media print {
+  /* Zoom der Ansicht (Inline-Stil) nie mitdrucken, sonst verrutschen die A4-Seiten */
+  .pagedjs_pages {
+    zoom: 1 !important;
+  }
   .druckreif-rahmen,
   .druckreif-ueberlagerung {
     display: none;

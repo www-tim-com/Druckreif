@@ -50,6 +50,9 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
   const [aktiv, setAktiv] = useState(0)
   const [umbricht, setUmbricht] = useState(false)
   const aktivRef = useRef(0)
+  // Nummer der Fassung, die jedes iframe gerade umbricht: eine späte „fertig“-Meldung einer älteren Fassung zählt nicht
+  const fassung = useRef(0)
+  const erwartet = useRef([0, 0])
   const aktuell = useRef({ auswahl, zeichen, zoom, rueckrufe, onFertig })
   aktuell.current = { auswahl, zeichen, zoom, rueckrufe, onFertig }
 
@@ -81,7 +84,9 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
   // den rohen, seitenbreiten Text, bevor Paged.js die Seiten gebaut hat
   useEffect(() => {
     setUmbricht(true)
-    rahmen[1 - aktivRef.current].current!.srcdoc = seiteBauen(html, vaultCss, titel)
+    const ziel = 1 - aktivRef.current
+    erwartet.current[ziel] = ++fassung.current
+    rahmen[ziel].current!.srcdoc = seiteBauen(html, vaultCss, titel, fassung.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, vaultCss, titel])
 
@@ -89,7 +94,7 @@ export function Vorschau({ html, vaultCss, titel, zoom, auswahl, zeichen, baut, 
     function empfangen(e: MessageEvent) {
       if (e.data?.druckreif !== 'fertig') return
       const nr = rahmen.findIndex((r) => r.current?.contentWindow === e.source)
-      if (nr < 0) return
+      if (nr < 0 || e.data.fassung !== erwartet.current[nr]) return
       const neu = rahmen[nr].current!
       const dok = neu.contentDocument!
       // Bildschirm-Stil erst jetzt einfügen: Paged.js verarbeitet vorhandene Stylesheets und verwirft @media screen
@@ -135,12 +140,12 @@ function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: bo
   auswahlZeigen(dok, a.auswahl)
 }
 
-function seiteBauen(html: string, vaultCss: string[], titel: string): string {
+function seiteBauen(html: string, vaultCss: string[], titel: string, fassung: number): string {
   const stil = (css: string) => `<style>${urlsAbsolut(css)}</style>`
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><title>${titel.replace(/</g, '&lt;')}</title>
 ${stil(SCHRIFTEN)}${stil(obsidianBasis)}${vaultCss.map(stil).join('')}${stil(druckCss)}
-<script>window.PagedConfig = { auto: true, after: () => parent.postMessage({ druckreif: 'fertig' }, '*') }</script>
+<script>window.PagedConfig = { auto: true, after: () => parent.postMessage({ druckreif: 'fertig', fassung: ${fassung} }, '*') }</script>
 <script src="${pagedUrl}"></script>
 </head><body class="theme-light"><div class="markdown-preview-view markdown-rendered">${html}</div></body></html>`
 }

@@ -294,7 +294,7 @@ function BildReiter(p: BandProps) {
       <Gruppe titel="Position">
         <div className="spalte">
           <Zahlfeld beschriftung="Abstand oben" wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={-30} max={150} onWert={(mm) => setzen({ offsetYMm: mm })} />
-          <span className="band-info">Ziehen verschiebt, Ecke ändert Größe</span>
+          <span className="band-info" title="Bild auf der Seite ziehen verschiebt es, die Ecken ändern die Größe">Ziehen: verschieben · Ecke: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Zurücksetzen">

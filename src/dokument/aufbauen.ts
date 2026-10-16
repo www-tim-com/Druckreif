@@ -24,6 +24,8 @@ export interface NotizTeil {
   /** ##-Abschnitte der Notiz, zur Auswahl „nur einzelne Abschnitte“ */
   abschnitte: string[]
   hatEinleitung: boolean
+  /** Layout-Datei ist beschädigt: nicht überschreiben, bis der Nutzer sie repariert hat */
+  layoutKaputt?: boolean
 }
 
 export interface Dokument {
@@ -31,6 +33,13 @@ export interface Dokument {
   html: string
   notizen: NotizTeil[]
   hinweise: Hinweis[]
+  /** Änderungszeit jeder gelesenen Datei (Notizen, Reihenfolgen, Bilder) beim Aufbau – zum Erkennen von Änderungen */
+  quellen: Map<string, number>
+}
+
+/** Änderungszeit oder -1, wenn es die Datei nicht (mehr) gibt. Vor dem Lesen nehmen: späteres Speichern fällt dann auf. */
+export function stempel(vault: Vault, pfad: string): Promise<number> {
+  return vault.geaendertAm(pfad).catch(() => -1)
 }
 
 /**
@@ -44,6 +53,7 @@ export async function dokumentAufbauen(
   titel: string,
 ): Promise<Dokument> {
   const hinweise: Hinweis[] = []
+  const quellen = new Map<string, number>()
   const teile: { pfad: string; eintrag: MappenEintrag; index: number }[] = []
 
   for (const [index, eintrag] of eintraege.entries()) {
@@ -51,6 +61,7 @@ export async function dokumentAufbauen(
       hinweise.push({ stufe: 'rot', notiz: eintrag.note, text: 'Notiz nicht gefunden (umbenannt oder verschoben?) – bitte aus der Mappe entfernen' })
       continue
     }
+    quellen.set(eintrag.note, await stempel(vault, eintrag.note))
     const reihenfolge = reihenfolgeLesen(await vault.lesenText(eintrag.note))
     if (!reihenfolge) teile.push({ pfad: eintrag.note, eintrag, index })
     else for (const pfad of notizenDerReihenfolge(vault, reihenfolge.notizen, eintrag.note, hinweise)) teile.push({ pfad, eintrag: { note: pfad }, index })
@@ -64,14 +75,14 @@ export async function dokumentAufbauen(
   const container = document.createElement('div')
   const notizen: NotizTeil[] = []
   for (const [i, t] of teile.entries()) {
-    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise)
+    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise, quellen)
     container.append(teil.article)
     notizen.push(teil.notiz)
   }
   await diagrammeZeichnen(container, (text) => hinweise.push({ stufe: 'rot', notiz: '', text }))
 
   // Zeichen, die in Dateinamen nicht erlaubt sind, durch Bindestrich ersetzen
-  return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise }
+  return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise, quellen }
 }
 
 function notizenDerReihenfolge(vault: Vault, namen: string[], reihenfolgePfad: string, hinweise: Hinweis[]): string[] {
@@ -95,8 +106,10 @@ async function notizAufbauen(
   mappenIndex: number,
   einstellungen: VaultEinstellungen,
   hinweise: Hinweis[],
+  quellen: Map<string, number>,
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
   const name = ohneEndung(dateiname(pfad))
+  if (!quellen.has(pfad)) quellen.set(pfad, await stempel(vault, pfad))
   const text = await vault.lesenText(pfad)
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
@@ -106,7 +119,13 @@ async function notizAufbauen(
   const bildUrls = new Map<string, string | null>()
   for (const bild of bilderFinden(text)) {
     const treffer = dateiFinden(vault, bild, notizOrdner, anhang)
-    bildUrls.set(bild, typeof treffer === 'string' ? await bildUrl(vault, treffer) : null)
+    if (typeof treffer !== 'string') {
+      bildUrls.set(bild, null)
+      continue
+    }
+    const zeit = await stempel(vault, treffer)
+    quellen.set(treffer, zeit)
+    bildUrls.set(bild, await bildUrl(vault, treffer, zeit))
   }
 
   const html = markdownUmwandeln(
@@ -124,13 +143,15 @@ async function notizAufbauen(
 
   let layout: LayoutDatei
   let zuordnung = new Map<string, number>()
+  let layoutKaputt = false
   try {
     layout = await layoutLaden(vault, pfad, titel)
     const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
     hinweise.push(...angewendet.hinweise)
     zuordnung = angewendet.zuordnung
   } catch (fehler) {
-    hinweis('rot', String((fehler as Error).message))
+    hinweis('rot', `${(fehler as Error).message} – Änderungen an dieser Notiz sind gesperrt, bis die Datei repariert ist`)
+    layoutKaputt = true
     layout = { version: 1, note: pfad, title: titel, settings: {}, items: [] }
   }
   if (eintrag.newPage === false) article.classList.add('anschliessen')
@@ -138,7 +159,7 @@ async function notizAufbauen(
 
   const abschnitte = [...new Set(bloecke.filter((b) => b.typ === 'heading' && b.pfad.length === 2).map((b) => b.pfad[1]))]
   const hatEinleitung = bloecke.some((b) => b.pfad.length === 1 && b.typ !== 'heading' && b.typ !== 'footnotes')
-  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung } }
+  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
 }
 
 /**
@@ -156,24 +177,28 @@ function abschnitteAuswaehlen(article: HTMLElement, auswahl: string[], hinweis: 
   hinweis('info', `Nur ausgewählte Abschnitte im Druck: ${namen.join(', ') || 'keine'}`)
 }
 
-// Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden
-const bildCache = new WeakMap<Vault, Map<string, string>>()
+// Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden.
+// Mit Änderungszeit: ein unter gleichem Namen ersetztes Bild wird neu geladen.
+const bildCache = new WeakMap<Vault, Map<string, { url: string; zeit: number }>>()
+
+/** Erst später freigeben: die gerade sichtbare Fassung zeigt die Bilder noch an. */
+function spaeterFreigeben(urls: string[]) {
+  setTimeout(() => urls.forEach((url) => URL.revokeObjectURL(url)), 30_000)
+}
 
 /** Beim Aktualisieren: Bilder neu laden (könnten ersetzt oder verschoben worden sein). */
 export function bilderVergessen(vault: Vault): void {
-  const alt = [...(bildCache.get(vault)?.values() ?? [])]
+  spaeterFreigeben([...(bildCache.get(vault)?.values() ?? [])].map((e) => e.url))
   bildCache.delete(vault)
-  // Erst später freigeben: die gerade sichtbare Fassung zeigt die Bilder noch an
-  setTimeout(() => alt.forEach((url) => URL.revokeObjectURL(url)), 30_000)
 }
 
-async function bildUrl(vault: Vault, pfad: string): Promise<string> {
+async function bildUrl(vault: Vault, pfad: string, zeit: number): Promise<string> {
   let cache = bildCache.get(vault)
   if (!cache) bildCache.set(vault, (cache = new Map()))
-  let url = cache.get(pfad)
-  if (!url) {
-    url = URL.createObjectURL(await vault.lesenBlob(pfad))
-    cache.set(pfad, url)
-  }
+  const alt = cache.get(pfad)
+  if (alt?.zeit === zeit) return alt.url
+  const url = URL.createObjectURL(await vault.lesenBlob(pfad))
+  cache.set(pfad, { url, zeit })
+  if (alt) spaeterFreigeben([alt.url])
   return url
 }

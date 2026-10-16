@@ -40,6 +40,12 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   die sichtbare Fassung nutzt sie noch).
 - Tabellen-Griffe liegen in einer Ebene direkt im body (`.druckreif-ueberlagerung`), nie innerhalb der Tabelle.
 - Die Polyfill-Datei von Paged.js ist nicht über `exports` freigegeben → Import über `/node_modules/...?url`.
+- Notiz-HTML läuft durch DOMPurify (`saeubern()` in `umwandeln.ts`, Entferntes wird als Hinweis gemeldet). Deshalb
+  KaTeX nur als HTML (MathML würde entfernt) und die Mermaid-Quelle URL-kodiert in `data-quelle` (`-->` im Attribut).
+- Automatisch neu laden: `Dokument.quellen` hält die Änderungszeit jeder gelesenen Datei (vor dem Lesen genommen);
+  die App vergleicht alle 1,5 s dagegen und liest bei Änderung auch die Dateiliste neu (neu eingefügte Bilder).
+- `bilderFinden()` und der Wikilink-Renderer müssen dieselben Bildnamen liefern (`bildZiel()`, `dekodieren()`).
+- Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`) – nie überschreiben.
 
 ## Prüfen
 
