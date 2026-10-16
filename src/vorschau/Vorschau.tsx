@@ -25,6 +25,10 @@ export interface VorschauSteuerung {
   /** tatsächliche Breite eines Bildes in mm (für die Pfeile im Menüband) */
   bildBreiteMm(id: string): number | null
   zuSeite(nummer: number): void
+  /** Seite, auf der ein Block beginnt */
+  seiteVonBlock(id: string): number | null
+  /** IDs der Blöcke, die auf dieser Seite beginnen (Fortsetzungen geteilter Blöcke zählen nicht) */
+  bloeckeAufSeite(nummer: number): string[]
   /** Momentaufnahme der umbrochenen Seiten als HTML (für die Seitenminiaturen) */
   miniaturHtml(): string | null
   /** Unsichtbar umbrechen und die Seiten zählen; `anpassen` ändert vorher eine Kopie des Inhalts (automatisch formatieren) */
@@ -101,6 +105,20 @@ export function Vorschau(p: Props) {
     zuSeite(nummer) {
       const seite = aktivesFenster()?.contentDocument?.querySelectorAll('.pagedjs_page')[nummer - 1]
       seite?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    },
+    seiteVonBlock(id) {
+      const el = aktivesFenster()?.contentDocument?.querySelector(`[data-block="${id}"]:not([data-split-from])`)
+      const nummer = el?.closest<HTMLElement>('.pagedjs_page')?.dataset.pageNumber
+      return nummer ? Number(nummer) : null
+    },
+    bloeckeAufSeite(nummer) {
+      const seiten = aktivesFenster()?.contentDocument?.querySelectorAll('.pagedjs_page')
+      const bloecke = [...(seiten?.[nummer - 1]?.querySelectorAll<HTMLElement>('[data-block]:not([data-split-from])') ?? [])]
+      // Ein manueller Umbruch vor dem ersten Block der nächsten Seite beendet diese Seite – gehört also auch zu ihr
+      const naechster = seiten?.[nummer]?.querySelector<HTMLElement>('[data-block]:not([data-split-from])')
+      const umbruch = naechster?.closest<HTMLElement>('.umbruch-vor')
+      if (naechster && umbruch && (umbruch === naechster || umbruch.querySelector('[data-block]') === naechster)) bloecke.push(naechster)
+      return bloecke.map((el) => el.dataset.block!)
     },
     miniaturHtml() {
       const dok = aktivesFenster()?.contentDocument

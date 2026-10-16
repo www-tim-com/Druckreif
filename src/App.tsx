@@ -23,6 +23,7 @@ import {
 import { type LayoutDatei, type LayoutEintrag, layoutSpeichern } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
 import {
+  type Mappe,
   type MappenDatei,
   type MappenEintrag,
   eintragEntfernen,
@@ -30,6 +31,7 @@ import {
   eintragVerschieben,
   mappeAendern,
   mappeLoeschen,
+  mappeZuruecksetzen,
   mappenLaden,
   mappenSpeichern,
   neueMappe,
@@ -63,8 +65,13 @@ interface Geladen {
   hinweise: Hinweis[]
 }
 
-/** Ein Schritt für Rückgängig/Wiederholen: Layout einer oder mehrerer Notizen vorher und nachher. */
-type Schritt = { pfad: string; vorher: LayoutDatei; nachher: LayoutDatei }[]
+/** Ein Schritt für Rückgängig/Wiederholen: Layout einer oder mehrerer Notizen und/oder eine Mappe, vorher und nachher. */
+interface Schritt {
+  layouts: { pfad: string; vorher: LayoutDatei; nachher: LayoutDatei }[]
+  mappe?: { id: string; vorher: Mappe; nachher: Mappe }
+}
+
+type LayoutAenderung = { pfad: string; aendern: (l: LayoutDatei) => LayoutDatei }
 
 /** Stufen für „Automatisch formatieren“: Grundschrift (pt) und Zeilenabstand, von groß nach klein */
 const STUFEN: [number, number][] = [
@@ -115,7 +122,7 @@ export function App() {
   const [treffer, setTreffer] = useState<Treffer[]>([])
   const [trefferAktiv, setTrefferAktiv] = useState(0)
   const [zielSeiten, setZielSeiten] = useState<number | undefined>(undefined)
-  const [formatiert, setFormatiert] = useState<{ laeuft: boolean; text: string | null }>({ laeuft: false, text: null })
+  const [status, setStatus] = useState<{ laeuft: boolean; text: string | null }>({ laeuft: false, text: null })
   const suchfeld = useRef<HTMLInputElement>(null)
   const vorschau = useRef<VorschauSteuerung>(null)
 
@@ -197,8 +204,14 @@ export function App() {
     versuchen(() => mappenSchreiben(geladen.vault, neu))
   }
 
-  function aktiveMappeAendern(aendern: Parameters<typeof mappeAendern>[2]) {
-    if (aktivId) mappenAendern((d) => mappeAendern(d, aktivId, aendern))
+  /** Inhalt der aktiven Mappe ändern (Notizen, Reihenfolge, Anschließen, Tinte sparen …) – mit Rückgängig. */
+  function aktiveMappeAendern(aendern: (m: Mappe) => Mappe) {
+    schrittAusfuehren([], aendern)
+  }
+
+  /** Mappe ohne neuen Rückgängig-Schritt setzen (für Rückgängig/Wiederholen selbst). */
+  function mappeSetzen(id: string, mappe: Mappe) {
+    mappenAendern((d) => mappeAendern(d, id, () => mappe))
   }
 
   function mappeOeffnen(id: string) {
@@ -316,10 +329,10 @@ export function App() {
 
   // Ergebnis des automatischen Formatierens eine Weile in der Statusleiste zeigen
   useEffect(() => {
-    if (formatiert.laeuft || !formatiert.text) return
-    const t = setTimeout(() => setFormatiert({ laeuft: false, text: null }), 12_000)
+    if (status.laeuft || !status.text) return
+    const t = setTimeout(() => setStatus({ laeuft: false, text: null }), 12_000)
     return () => clearTimeout(t)
-  }, [formatiert])
+  }, [status])
 
   // Breite des gewählten Bildes messen (nach jedem Umbruch neu)
   useEffect(() => {
@@ -366,36 +379,86 @@ export function App() {
   }
 
   function layoutAendern(pfad: string, aendern: (l: LayoutDatei) => LayoutDatei) {
-    layoutsAendern([{ pfad, aendern }])
+    schrittAusfuehren([{ pfad, aendern }])
   }
 
-  /** Mehrere Notizen auf einmal ändern – ein Schritt für Rückgängig. */
-  function layoutsAendern(aenderungen: { pfad: string; aendern: (l: LayoutDatei) => LayoutDatei }[]) {
-    const schritt: Schritt = []
+  function layoutsAendern(aenderungen: LayoutAenderung[]) {
+    schrittAusfuehren(aenderungen)
+  }
+
+  /**
+   * Layouts mehrerer Notizen und/oder die aktive Mappe ändern – zusammen ein Schritt für Rückgängig.
+   * Liefert false, wenn nichts zu ändern war.
+   */
+  function schrittAusfuehren(aenderungen: LayoutAenderung[], mappeNeu?: (m: Mappe) => Mappe): boolean {
+    const schritt: Schritt = { layouts: [] }
     for (const { pfad, aendern } of aenderungen) {
       const teil = dokument?.notizen.find((n) => n.pfad === pfad)
-      if (!teil || layoutGesperrt(pfad)) return
+      if (!teil || layoutGesperrt(pfad)) return false
       const vorher = layoutVon(teil)
       const nachher = aendern(vorher)
-      if (JSON.stringify(vorher) !== JSON.stringify(nachher)) schritt.push({ pfad, vorher, nachher })
+      if (JSON.stringify(vorher) !== JSON.stringify(nachher)) schritt.layouts.push({ pfad, vorher, nachher })
     }
-    if (schritt.length === 0) return
+    const mappeVorher = mappenRef.current.mappen.find((m) => m.id === aktivId)
+    if (mappeNeu && mappeVorher) {
+      const nachher = mappeNeu(mappeVorher)
+      if (JSON.stringify(mappeVorher) !== JSON.stringify(nachher)) schritt.mappe = { id: mappeVorher.id, vorher: mappeVorher, nachher }
+    }
+    if (schritt.layouts.length === 0 && !schritt.mappe) return false
     setVerlauf((v) => ({ zurueck: [...v.zurueck.slice(-MAX_VERLAUF + 1), schritt], vor: [] }))
-    versuchen(() => Promise.all(schritt.map((a) => layoutSchreiben(a.nachher))).then(() => {}))
+    anwenden(schritt, 'nachher')
+    return true
+  }
+
+  function anwenden(schritt: Schritt, stand: 'vorher' | 'nachher') {
+    if (schritt.mappe) mappeSetzen(schritt.mappe.id, schritt.mappe[stand])
+    if (schritt.layouts.length > 0) versuchen(() => Promise.all(schritt.layouts.map((a) => layoutSchreiben(a[stand]))).then(() => {}))
   }
 
   function zurueck() {
     const schritt = verlauf.zurueck.at(-1)
-    if (!schritt || schritt.some((a) => layoutGesperrt(a.pfad))) return
+    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
     setVerlauf((v) => ({ zurueck: v.zurueck.slice(0, -1), vor: [...v.vor, schritt] }))
-    versuchen(() => Promise.all(schritt.map((a) => layoutSchreiben(a.vorher))).then(() => {}))
+    anwenden(schritt, 'vorher')
   }
 
   function vor() {
     const schritt = verlauf.vor.at(-1)
-    if (!schritt || schritt.some((a) => layoutGesperrt(a.pfad))) return
+    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
     setVerlauf((v) => ({ zurueck: [...v.zurueck, schritt], vor: v.vor.slice(0, -1) }))
-    versuchen(() => Promise.all(schritt.map((a) => layoutSchreiben(a.nachher))).then(() => {}))
+    anwenden(schritt, 'nachher')
+  }
+
+  /**
+   * Alle manuellen Änderungen an Blöcken, die auf dieser Seite beginnen, verwerfen (Seite wie automatisch).
+   * Ohne Nummer: die Seite des gewählten Blocks, sonst die gerade sichtbare.
+   */
+  function seiteZuruecksetzen() {
+    if (!dokument) return
+    const nummer = (auswahl ? vorschau.current?.seiteVonBlock(auswahl) : null) ?? seite
+    const ids = new Set(vorschau.current?.bloeckeAufSeite(nummer) ?? [])
+    const aenderungen: LayoutAenderung[] = dokument.notizen
+      .filter((t) => t.bloecke.some((b) => ids.has(b.id)))
+      .map((t) => ({
+        pfad: t.pfad,
+        aendern: (l) => ({ ...l, items: l.items.filter((e) => !ids.has(blockFinden(e.anchor, t.bloecke)?.block.id ?? '')) }),
+      }))
+    const geaendert = schrittAusfuehren(aenderungen)
+    setStatus({
+      laeuft: false,
+      text: geaendert ? `Seite ${nummer} zurückgesetzt (Rückgängig: Strg+Z)` : `Auf Seite ${nummer} gibt es keine manuellen Änderungen`,
+    })
+  }
+
+  /** Komplett neu anfangen: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“ zurück auf automatisch. */
+  function allesZuruecksetzen() {
+    if (!dokument || !aktiveMappe) return
+    if (!confirm(`Alle manuellen Änderungen in der Mappe „${aktiveMappe.name}“ verwerfen?\n\nUmbrüche, Bildgrößen, Schrift, Ausgeblendetes, „Direkt anschließen“ und „Tinte sparen“ werden zurückgesetzt. Notizen, Reihenfolge, Auszüge und eingefügte Notizen bleiben. Rückgängig ist möglich.`)) return
+    const geaendert = schrittAusfuehren(
+      dokument.notizen.map((t) => ({ pfad: t.pfad, aendern: layoutZuruecksetzen })),
+      mappeZuruecksetzen,
+    )
+    setStatus({ laeuft: false, text: geaendert ? 'Alles zurückgesetzt (Rückgängig: Strg+Z)' : 'Es gibt keine manuellen Änderungen' })
   }
 
   /**
@@ -405,9 +468,9 @@ export function App() {
    */
   function automatischFormatieren(ziel: number) {
     const steuerung = vorschau.current
-    if (!dokument || !steuerung || formatiert.laeuft) return
+    if (!dokument || !steuerung || status.laeuft) return
     if (dokument.notizen.some((n) => layoutGesperrt(n.pfad))) return
-    setFormatiert({ laeuft: true, text: `Formatiere auf ${ziel} ${ziel === 1 ? 'Seite' : 'Seiten'} …` })
+    setStatus({ laeuft: true, text: `Formatiere auf ${ziel} ${ziel === 1 ? 'Seite' : 'Seiten'} …` })
     versuchen(async () => {
       try {
         const gemessen = new Map<number, number>()
@@ -442,7 +505,7 @@ export function App() {
           })),
         )
         const werte = `${zahlText(pt)} pt, Zeilenabstand ${zahlText(lh)}`
-        setFormatiert({
+        setStatus({
           laeuft: false,
           text:
             bester >= 0
@@ -450,7 +513,7 @@ export function App() {
               : `Passt nicht auf ${ziel} ${ziel === 1 ? 'Seite' : 'Seiten'}: kleinste Stufe (${werte}) ergibt ${seitenZahl} Seiten – Umbrüche und Leerraum prüfen`,
         })
       } catch (e) {
-        setFormatiert({ laeuft: false, text: null })
+        setStatus({ laeuft: false, text: null })
         throw e
       }
     })
@@ -705,8 +768,11 @@ export function App() {
         zielSeiten={zielSeiten}
         onZielSeiten={setZielSeiten}
         formatieren={dokument ? () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)) : null}
-        formatiertLaeuft={formatiert.laeuft}
+        formatiertLaeuft={status.laeuft}
         onSuche={sucheOeffnen}
+        seiteZuruecksetzen={dokument ? seiteZuruecksetzen : null}
+        seiteNummer={(auswahl ? vorschau.current?.seiteVonBlock(auswahl) : null) ?? seite}
+        allesZuruecksetzen={dokument ? allesZuruecksetzen : null}
       />
 
       {nav && (
@@ -761,7 +827,7 @@ export function App() {
             zoom={zoom}
             auswahl={auswahl}
             zeichen={zeichen}
-            baut={baut || formatiert.laeuft}
+            baut={baut || status.laeuft}
             tinteSparen={!!aktiveMappe?.inkSaving}
             suche={suche}
             trefferAktiv={trefferAktiv}
@@ -800,7 +866,7 @@ export function App() {
         seiten={seiten}
         notizen={dokument?.notizen.length ?? 0}
         probleme={probleme}
-        meldung={zuweisen ? 'Block anklicken, dem der Layout-Eintrag zugewiesen wird – Esc bricht ab' : formatiert.text}
+        meldung={zuweisen ? 'Block anklicken, dem der Layout-Eintrag zugewiesen wird – Esc bricht ab' : status.text}
         onHinweise={() => setHinweiseOffen(!hinweiseOffen)}
         zoom={zoom}
         onZoom={setZoom}

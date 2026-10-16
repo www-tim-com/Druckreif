@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FileX2,
   Image,
   ListTree,
   Maximize2,
@@ -103,6 +104,11 @@ export interface BandProps {
   formatieren: (() => void) | null
   formatiertLaeuft: boolean
   onSuche(): void
+  /** Manuelle Änderungen der gewählten bzw. sichtbaren Seite verwerfen */
+  seiteZuruecksetzen: (() => void) | null
+  seiteNummer: number
+  /** Komplett neu anfangen: alle Notizen der Mappe und Mappen-Einstellungen */
+  allesZuruecksetzen: (() => void) | null
 }
 
 export function Menueband(p: BandProps) {
@@ -277,7 +283,22 @@ function LayoutReiter(p: BandProps) {
         <GrosserKnopf symbol={Droplet} text="Tinte sparen" aktiv={p.tinteSparen} gesperrt={!p.formatieren} onClick={() => p.onTinteSparen(!p.tinteSparen)}
           tipp="Callouts und Tabellenköpfe ohne farbige Flächen, in Graustufen drucken" />
       </Gruppe>
+      <ZuruecksetzenGruppe {...p} />
     </>
+  )
+}
+
+/** Zurücksetzen in drei Stufen: Block (Gruppe „Block“), Seite, alles. Alles bleibt rückgängig zu machen. */
+function ZuruecksetzenGruppe(p: BandProps) {
+  return (
+    <Gruppe titel="Zurücksetzen">
+      <div className="spalte">
+        <KleinerKnopf symbol={FileX2} text={`Seite ${p.seiteNummer} zurücksetzen`} gesperrt={!p.seiteZuruecksetzen} onClick={() => p.seiteZuruecksetzen?.()}
+          tipp="Alle manuellen Änderungen an Blöcken dieser Seite verwerfen (Seite des gewählten Blocks, sonst die sichtbare)" />
+        <KleinerKnopf symbol={RotateCcw} text="Alles zurücksetzen" gesperrt={!p.allesZuruecksetzen} onClick={() => p.allesZuruecksetzen?.()}
+          tipp="Komplett neu anfangen: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“ verwerfen" />
+      </div>
+    </Gruppe>
   )
 }
 

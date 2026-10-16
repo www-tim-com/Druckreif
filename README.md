@@ -64,6 +64,10 @@ Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten
      alles auf diese Seitenzahl passt, wird ausprobiert und als normale Notiz-Einstellung gespeichert. Danach frei
      änderbar; Strg+Z nimmt es für alle Notizen in einem Schritt zurück.
    - **Tinte sparen:** Callouts und Tabellenköpfe ohne farbige Flächen, in Graustufen (pro Mappe gespeichert).
+   Gruppe **Zurücksetzen:** „Seite N zurücksetzen“ verwirft alle manuellen Änderungen an Blöcken dieser Seite (Seite
+   des gewählten Blocks, sonst die sichtbare; ein Umbruch am Seitenende zählt mit). „Alles zurücksetzen“ fängt komplett
+   neu an: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“. Notizen, Reihenfolge, Auszüge und
+   eingefügte Notizen bleiben.
 9. **Ansicht:** Zoom, Navigation und Hinweise ein/aus, „Umbrüche zeigen“, Aktualisieren.
 10. **Aktualisieren** (F5): liest den Vault neu ein – geänderte Notizen, neue/verschobene/ersetzte Bilder, Theme,
     Snippets, Mappen. Geänderte Notizen und Bilder werden zusätzlich alle 1,5 s automatisch erkannt.
@@ -79,6 +83,8 @@ Seiten in der Mitte, Hinweise rechts, Statusleiste mit Seitenzahl und Zoom unten
      steht an der Stelle ein Hinweis (nur Bildschirm); Klick darauf oder „Einfügen“ in den Hinweisen fügt den Inhalt ein,
      „Nicht einfügen“ nimmt ihn wieder heraus. Die Wahl steht in der Layout-Datei der Notiz.
 
+**Rückgängig** (Strg+Z/Strg+Y) gilt für alle Änderungen an Layout und Mappe: Umbrüche, Bilder, Schrift, automatisch
+formatieren, Tinte sparen, Notizen hinzufügen/entfernen/verschieben, anschließen, Auszüge, Zurücksetzen.
 Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsidian, aktualisiert sich die Ansicht von selbst.
 
 | Taste | Wirkung |
@@ -100,7 +106,7 @@ Alles wird sofort in `.lernzettel/` gespeichert. Speichert man die Notiz in Obsi
 | 3 | Automatisches Layout | Abschnitte, Kapitel ohne ###, Callouts, Tabellen, Listen, Bilder bleiben per CSS zusammen; Leerraum wird gemessen und gemeldet (Beheben per Knopf), „Automatisch formatieren“ auf N Seiten; automatische Teilung ohne Nachfrage fehlt |
 | 4 | Nachjustieren | fertig: Bilder ziehen/skalieren/ausrichten/Textfluss, Umbrüche, Abstände, Schriftgröße, Ausblenden, automatisches Speichern |
 | 5 | Verankerung | fertig: Fingerabdrücke, Zuordnung still/gelb/rot, Hinweisliste mit Zuweisen/Löschen, Neu laden |
-| 6 | Feinschliff | Mappen mit Reitern (Auszüge, direkt anschließen), Aktualisieren, Tabellen, Schrift/Zeilenabstand, Reihenfolgedatei, Rückgängig/Wiederholen, Zurücksetzen (Block/Notiz) fertig; Treueprüfung und „Seite zurücksetzen“ fehlen |
+| 6 | Feinschliff | Mappen mit Reitern (Auszüge, direkt anschließen), Aktualisieren, Tabellen, Schrift/Zeilenabstand, Reihenfolgedatei, Rückgängig/Wiederholen (auch für Mappen), Zurücksetzen (Block/Seite/Notiz/alles) fertig; Treueprüfung fehlt |
 
 ## Aufbau
 

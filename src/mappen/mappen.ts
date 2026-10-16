@@ -74,6 +74,10 @@ export const tinteSparenSetzen = (an: boolean) => (m: Mappe): Mappe => {
   return an ? { ...rest, inkSaving: true } : rest
 }
 
+/** Layout-Einstellungen der Mappe auf automatisch: jede Notiz auf neuer Seite, Tinte sparen aus. Auszüge bleiben. */
+export const mappeZuruecksetzen = (m: Mappe): Mappe =>
+  tinteSparenSetzen(false)({ ...m, items: m.items.map(({ newPage: _n, ...e }) => e) })
+
 export const notizAnhaengen = (note: string) => (m: Mappe): Mappe => ({ ...m, items: [...m.items, { note }] })
 
 export const eintragEntfernen = (index: number) => (m: Mappe): Mappe => ({
