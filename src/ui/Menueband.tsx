@@ -7,9 +7,11 @@ import {
   AlignLeft,
   AlignRight,
   Ban,
+  Droplet,
   Eye,
   EyeOff,
   FileText,
+  FileX2,
   Image,
   ListTree,
   Maximize2,
@@ -22,10 +24,13 @@ import {
   RefreshCw,
   RotateCcw,
   Rows3,
+  ScissorsLineDashed,
+  Search,
   SeparatorHorizontal,
   Sparkles,
   Table,
   Undo2,
+  WandSparkles,
   WrapText,
 } from 'lucide-react'
 import type { LayoutEintrag } from '../layout/layoutDatei'
@@ -35,6 +40,7 @@ import {
   bildSetzen,
   eintragZuruecksetzen,
   tabelleSetzen,
+  teilenSetzen,
   umbruchSetzen,
 } from '../layout/bearbeiten'
 import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld } from './Band'
@@ -87,6 +93,22 @@ export interface BandProps {
   onHinweise(an: boolean): void
   zeichen: boolean
   onZeichen(an: boolean): void
+
+  /** Tinte sparen (pro Mappe) */
+  tinteSparen: boolean
+  onTinteSparen(an: boolean): void
+  /** Automatisch formatieren auf eine Seitenzahl */
+  seiten: number
+  zielSeiten: number | undefined
+  onZielSeiten(n: number | undefined): void
+  formatieren: (() => void) | null
+  formatiertLaeuft: boolean
+  onSuche(): void
+  /** Manuelle Änderungen der gewählten bzw. sichtbaren Seite verwerfen */
+  seiteZuruecksetzen: (() => void) | null
+  seiteNummer: number
+  /** Komplett neu anfangen: alle Notizen der Mappe und Mappen-Einstellungen */
+  allesZuruecksetzen: (() => void) | null
 }
 
 export function Menueband(p: BandProps) {
@@ -178,6 +200,9 @@ function StartReiter(p: BandProps) {
           onClick={() => p.blockAendern(umbruchSetzen(e?.pageBreakBefore === true ? undefined : true))}
         />
       </Gruppe>
+      <Gruppe titel="Bearbeiten">
+        <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
+      </Gruppe>
       <Gruppe titel="Ausgabe">
         <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen: geänderte Notizen, neue oder verschobene Bilder, Theme (F5)" onClick={p.aktualisieren} />
         <GrosserKnopf symbol={Printer} text="Drucken / PDF" tipp="Drucken oder als PDF speichern (Strg+P)" onClick={p.drucken} />
@@ -226,6 +251,9 @@ function LayoutReiter(p: BandProps) {
         <GrosserKnopf symbol={Ban} text="Verhindern" aktiv={umbruch === false} gesperrt={!p.block} onClick={() => p.blockAendern(umbruchSetzen(false))} tipp="Möglichst keinen Umbruch vor diesem Block" />
         <GrosserKnopf symbol={Sparkles} text="Automatisch" aktiv={!!p.block && umbruch === undefined} gesperrt={!p.block} onClick={() => p.blockAendern(umbruchSetzen(undefined))} tipp="Umbruch nach den Regeln der Export-Anweisung" />
       </Gruppe>
+      <Gruppe titel="Über Seiten">
+        <TeilenKnopf {...p} />
+      </Gruppe>
       <Gruppe titel="Abstand">
         <div className="spalte">
           <Zahlfeld beschriftung="Vor" wert={e?.spaceBeforeMm} platzhalter="auto" einheit="mm" schritt={1} min={-20} max={100} gesperrt={!p.block}
@@ -244,7 +272,52 @@ function LayoutReiter(p: BandProps) {
         </div>
         <GrosserKnopf symbol={FileText} text="Layout zurücksetzen" gesperrt={!p.notizHatLayout} onClick={p.notizZuruecksetzen} tipp="Alle manuellen Änderungen dieser Notiz verwerfen" />
       </Gruppe>
+      <Gruppe titel="Mappe">
+        <div className="spalte">
+          <Zahlfeld beschriftung="Auf Seiten" wert={p.zielSeiten} platzhalter={String(Math.max(1, p.seiten - 1))} einheit="" schritt={1} min={1} max={99}
+            gesperrt={!p.formatieren} onWert={(n) => p.onZielSeiten(n === undefined ? undefined : Math.round(n))} />
+          <span className="band-info">{p.seiten > 0 ? `jetzt ${p.seiten} ${p.seiten === 1 ? 'Seite' : 'Seiten'}` : ' '}</span>
+        </div>
+        <GrosserKnopf symbol={WandSparkles} text="Automatisch formatieren" gesperrt={!p.formatieren || p.formatiertLaeuft} onClick={() => p.formatieren?.()}
+          tipp="Grundschrift und Zeilenabstand aller Notizen der Mappe so wählen, dass alles auf die angegebene Seitenzahl passt. Danach weiter frei änderbar (Rückgängig: Strg+Z)." />
+        <GrosserKnopf symbol={Droplet} text="Tinte sparen" aktiv={p.tinteSparen} gesperrt={!p.formatieren} onClick={() => p.onTinteSparen(!p.tinteSparen)}
+          tipp="Callouts und Tabellenköpfe ohne farbige Flächen, in Graustufen drucken" />
+      </Gruppe>
+      <ZuruecksetzenGruppe {...p} />
     </>
+  )
+}
+
+/** Zurücksetzen in drei Stufen: Block (Gruppe „Block“), Seite, alles. Alles bleibt rückgängig zu machen. */
+function ZuruecksetzenGruppe(p: BandProps) {
+  return (
+    <Gruppe titel="Zurücksetzen">
+      <div className="spalte">
+        <KleinerKnopf symbol={FileX2} text={`Seite ${p.seiteNummer} zurücksetzen`} gesperrt={!p.seiteZuruecksetzen} onClick={() => p.seiteZuruecksetzen?.()}
+          tipp="Alle manuellen Änderungen an Blöcken dieser Seite verwerfen (Seite des gewählten Blocks, sonst die sichtbare)" />
+        <KleinerKnopf symbol={RotateCcw} text="Alles zurücksetzen" gesperrt={!p.allesZuruecksetzen} onClick={() => p.allesZuruecksetzen?.()}
+          tipp="Komplett neu anfangen: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“ verwerfen" />
+      </div>
+    </Gruppe>
+  )
+}
+
+/** Abschnitt, Liste, Callout, Codeblock oder Tabelle darf über Seiten laufen statt am Stück auf die nächste Seite zu rutschen. */
+function TeilenKnopf(p: BandProps) {
+  const e = p.block?.eintrag
+  const typ = p.block?.typ
+  const tabelle = typ === 'table'
+  const moeglich = typ === 'heading' || typ === 'list' || typ === 'callout' || typ === 'code' || tabelle
+  const an = tabelle ? !!e?.table?.split : !!e?.split
+  return (
+    <GrosserKnopf
+      symbol={ScissorsLineDashed}
+      text="Teilen erlauben"
+      aktiv={moeglich && an}
+      gesperrt={!moeglich}
+      onClick={() => p.blockAendern(tabelle ? tabelleSetzen({ split: an ? undefined : true }) : teilenSetzen(!an))}
+      tipp={typ === 'heading' ? 'Der ganze Abschnitt darf auf der nächsten Seite weiterlaufen (gegen halb leere Seiten)' : 'Darf auf der nächsten Seite weiterlaufen (sonst am Stück)'}
+    />
   )
 }
 
@@ -261,6 +334,7 @@ function AnsichtReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Anzeigen">
         <GrosserKnopf symbol={ListTree} text="Navigation" aktiv={p.nav} onClick={() => p.onNav(!p.nav)} />
+        <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
         <GrosserKnopf symbol={PanelRight} text="Hinweise" aktiv={p.hinweise} onClick={() => p.onHinweise(!p.hinweise)} />
         <GrosserKnopf symbol={Pilcrow} text="Umbrüche zeigen" aktiv={p.zeichen} onClick={() => p.onZeichen(!p.zeichen)} tipp="Manuelle Seitenumbrüche auf den Seiten markieren" />
       </Gruppe>
@@ -294,7 +368,7 @@ function BildReiter(p: BandProps) {
       <Gruppe titel="Position">
         <div className="spalte">
           <Zahlfeld beschriftung="Abstand oben" wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={-30} max={150} onWert={(mm) => setzen({ offsetYMm: mm })} />
-          <span className="band-info">Ziehen verschiebt, Ecke ändert Größe</span>
+          <span className="band-info" title="Bild auf der Seite ziehen verschiebt es, die Ecken ändern die Größe">Ziehen: verschieben · Ecke: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Zurücksetzen">

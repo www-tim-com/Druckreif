@@ -21,3 +21,16 @@ Diese Notiz hat keine Titelzeile, deshalb wird der Dateiname zum Titel.
 | 4 | < 30 % |
 
 ![Lunge](Lunge.png)
+
+## Bildvergleich
+
+![[Lunge.png|140]]
+![[Atemwege.svg|140]]
+*Abb.: Zwei Bilder auf aufeinanderfolgenden Zeilen werden zu zwei Bildern mit eigenem Rahmen*
+
+| Befund | Bild |
+| --- | --- |
+| Überblähte Lunge | ![[Lunge.png\|80]] |
+
+![[Atemwege.svg|120]]
+Textzeile direkt unter einem Bild bleibt ein eigener Absatz.

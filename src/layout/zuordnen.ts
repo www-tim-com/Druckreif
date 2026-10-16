@@ -149,6 +149,7 @@ function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
   if (e.spaceAfterMm !== undefined) el.style.marginBottom = `${e.spaceAfterMm}mm`
   if (e.fontSizePt !== undefined) el.style.fontSize = `${e.fontSizePt}pt`
   if (e.lineHeight !== undefined) el.style.lineHeight = String(e.lineHeight)
+  if (e.split) ziel.classList.add('teilbar')
 
   const tabelle = e.table
   if (tabelle && el.tagName === 'TABLE') {

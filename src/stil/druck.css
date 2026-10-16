@@ -102,6 +102,17 @@ section.kapitel.am-stueck {
   widows: 2;
 }
 
+/* Layout-Datei „split“: darf über Seiten laufen (nach den Regeln oben, damit sie Vorrang hat) */
+section.kapitel.teilbar,
+section.abschnitt.teilbar,
+section.unterabschnitt.teilbar,
+.markdown-rendered ul.teilbar,
+.markdown-rendered ol.teilbar,
+.markdown-rendered .callout.teilbar,
+.markdown-rendered pre.teilbar {
+  break-inside: auto;
+}
+
 /* Tabellen aus der Layout-Datei: Breite, Ausrichtung, kompakt, teilbar */
 .markdown-rendered table[data-ausrichtung='center'] { margin-inline: auto; }
 .markdown-rendered table[data-ausrichtung='right'] { margin-inline-start: auto; }
@@ -172,4 +183,37 @@ section::after { content: ''; display: block; clear: both; }
   border: 1.5px dashed rgb(var(--color-red-rgb));
   color: rgb(var(--color-red-rgb));
   padding: 0.3em 0.6em;
+}
+
+/* Eingebettete Notiz ![[…]] – nur auf Wunsch eingefügt; sonst ein Platzhalter ohne Höhe (Hinweis auf dem Bildschirm) */
+.markdown-rendered .einbettung-inhalt {
+  border-inline-start: 2px solid #c8c8c8;
+  padding-inline-start: 0.9em;
+  margin: 0 0 0.9em;
+}
+.markdown-rendered .einbettung-inhalt > :first-child {
+  margin-top: 0;
+}
+.markdown-rendered p.nur-einbettung {
+  margin: 0;
+  height: 0;
+}
+
+/* Tinte sparen: Callouts und Tabellenköpfe ohne farbige Flächen, in Graustufen */
+body.tinte-sparen .callout {
+  --callout-color: 90, 90, 90 !important;
+  background: none !important;
+  border: 1px solid #8a8a8a;
+}
+body.tinte-sparen .callout-title {
+  color: #222 !important;
+}
+body.tinte-sparen .markdown-rendered th,
+body.tinte-sparen .markdown-rendered thead tr,
+body.tinte-sparen .markdown-rendered thead {
+  background: none !important;
+  color: #000 !important;
+}
+body.tinte-sparen .markdown-rendered thead th {
+  border-bottom: 1.5px solid #000;
 }

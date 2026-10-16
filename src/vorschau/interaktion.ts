@@ -17,6 +17,10 @@ export interface Rueckrufe {
   tabelleBreite(id: string, prozent: number): void
   taste(e: KeyboardEvent): void
   seite(nummer: number): void
+  /** Knopf in der Leerraum-Markierung (Index in der Liste aus leerraumFinden) */
+  leerraum(index: number): void
+  /** Platzhalter einer nicht eingefügten Notiz angeklickt */
+  einbettung(notiz: string, ziel: string): void
 }
 
 const MIN_BREITE_MM = 15
@@ -55,6 +59,14 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
     if (gezogen.has(dok)) {
       gezogen.delete(dok)
       return
+    }
+    const ziel = e.target as Element
+    const leerraum = ziel.closest<HTMLElement>('.druckreif-leerraum button')
+    if (leerraum) return rueckrufe().leerraum(Number(leerraum.dataset.leerraum))
+    const einbettung = ziel.closest<HTMLElement>('span.einbettung:not(.verschachtelt)')
+    if (einbettung) {
+      const notiz = einbettung.closest<HTMLElement>('article.notiz')?.dataset.notiz
+      if (notiz) return rueckrufe().einbettung(notiz, einbettung.dataset.ziel ?? '')
     }
     if ((e.target as Element).closest('.druckreif-griff, .druckreif-ueberlagerung')) return
     rueckrufe().auswahl(blockVon(e.target as Element)?.getAttribute('data-block') ?? null)

@@ -92,6 +92,73 @@
     border-radius: 2px;
   }
 
+  /* Leerraum-Warnung: schraffierte Fläche über dem leeren Teil der Seite */
+  .pagedjs_page {
+    position: relative;
+  }
+  .druckreif-leerraum {
+    position: absolute;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px dashed #c19c00;
+    background: repeating-linear-gradient(-45deg, rgba(193, 156, 0, 0.07) 0 6px, transparent 6px 12px);
+    font: 12px 'Segoe UI', system-ui, sans-serif;
+    color: #7a6200;
+    text-align: center;
+    pointer-events: none;
+  }
+  .druckreif-leerraum button {
+    pointer-events: auto;
+    font: inherit;
+    color: #2b579a;
+    background: #fff;
+    border: 1px solid #a9bfe2;
+    border-radius: 3px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .druckreif-leerraum button:hover {
+    background: #e9eff8;
+  }
+
+  /* Eingebettete Notiz, die nicht eingefügt ist: Hinweis an der Stelle, ohne den Umbruch zu verändern */
+  span.einbettung {
+    position: relative;
+  }
+  span.einbettung:not(.eingefuegt)::after {
+    content: '⧉ ' attr(data-ziel) ' – nicht eingefügt (klicken zum Einfügen)';
+    position: absolute;
+    left: 0;
+    top: -0.6em;
+    white-space: nowrap;
+    font: 11px 'Segoe UI', system-ui, sans-serif;
+    color: #2b579a;
+    background: #f3f7fc;
+    border: 1px dashed #a9bfe2;
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+  }
+  span.einbettung.verschachtelt::after {
+    content: '⧉ ' attr(data-ziel) ' – in eingebetteter Notiz, nicht eingefügt';
+    cursor: default;
+  }
+
+  /* Suche (Strg+F) */
+  ::highlight(druckreif-suche) {
+    background-color: #fff1a8;
+  }
+  ::highlight(druckreif-suche-aktiv) {
+    background-color: #f7b500;
+    color: #000;
+  }
+
   /* Formatierungszeichen: manuelle Umbrüche markieren, ohne die Seitenaufteilung zu verschieben */
   body.zeichen .umbruch-vor {
     box-shadow: 0 -4px 0 -2px #2b579a;
@@ -102,8 +169,13 @@
 }
 
 @media print {
+  /* Zoom der Ansicht (Inline-Stil) nie mitdrucken, sonst verrutschen die A4-Seiten */
+  .pagedjs_pages {
+    zoom: 1 !important;
+  }
   .druckreif-rahmen,
-  .druckreif-ueberlagerung {
+  .druckreif-ueberlagerung,
+  .druckreif-leerraum {
     display: none;
   }
 }

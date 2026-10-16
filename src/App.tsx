@@ -2,12 +2,13 @@
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen } from './dokument/aufbauen'
+import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen, stempel } from './dokument/aufbauen'
 import type { Block } from './dokument/bloecke'
 import type { Hinweis } from './hinweise'
 import {
   ausblendenSetzen,
   bildSetzen,
+  einbettungSetzen,
   eintragAendern,
   eintragAnIndex,
   eintragLoeschen,
@@ -16,11 +17,13 @@ import {
   notizSchriftSetzen,
   schriftSetzen,
   tabelleSetzen,
+  teilenSetzen,
   umbruchSetzen,
 } from './layout/bearbeiten'
 import { type LayoutDatei, type LayoutEintrag, layoutSpeichern } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
 import {
+  type Mappe,
   type MappenDatei,
   type MappenEintrag,
   eintragEntfernen,
@@ -28,11 +31,13 @@ import {
   eintragVerschieben,
   mappeAendern,
   mappeLoeschen,
+  mappeZuruecksetzen,
   mappenLaden,
   mappenSpeichern,
   neueMappe,
   notizAnhaengen,
   notizName,
+  tinteSparenSetzen,
   umbenennen,
 } from './mappen/mappen'
 import { type VaultEinstellungen, vaultEinstellungenLaden } from './stil/stil'
@@ -49,7 +54,9 @@ import { type Notiz, notizenLaden } from './vault/notizen'
 import { gemerktenOrdnerOeffnen, gemerkterOrdnerName, ordnerWaehlen, ordnerZugriffMoeglich } from './vault/ordnerVault'
 import type { Vault } from './vault/vault'
 import type { Rueckrufe } from './vorschau/interaktion'
-import { Vorschau, type VorschauSteuerung } from './vorschau/Vorschau'
+import { type Fertig, Vorschau, type VorschauSteuerung } from './vorschau/Vorschau'
+import { type Leerraum, LEERRAUM_KNOPF, leerraumText } from './vorschau/leerraum'
+import type { Treffer } from './vorschau/suche'
 
 interface Geladen {
   vault: Vault
@@ -58,12 +65,26 @@ interface Geladen {
   hinweise: Hinweis[]
 }
 
-/** Ein Schritt für Rückgängig/Wiederholen: Layout einer Notiz vorher und nachher. */
+/** Ein Schritt für Rückgängig/Wiederholen: Layout einer oder mehrerer Notizen und/oder eine Mappe, vorher und nachher. */
 interface Schritt {
-  pfad: string
-  vorher: LayoutDatei
-  nachher: LayoutDatei
+  layouts: { pfad: string; vorher: LayoutDatei; nachher: LayoutDatei }[]
+  mappe?: { id: string; vorher: Mappe; nachher: Mappe }
 }
+
+type LayoutAenderung = { pfad: string; aendern: (l: LayoutDatei) => LayoutDatei }
+
+/** Stufen für „Automatisch formatieren“: Grundschrift (pt) und Zeilenabstand, von groß nach klein */
+const STUFEN: [number, number][] = [
+  [12, 1.4],
+  [11.5, 1.4],
+  [11, 1.35],
+  [10.5, 1.35],
+  [10, 1.3],
+  [9.5, 1.3],
+  [9, 1.25],
+  [8.5, 1.2],
+  [8, 1.2],
+]
 
 type Aendern = (e: LayoutEintrag) => LayoutEintrag
 
@@ -95,6 +116,14 @@ export function App() {
   const [speichert, setSpeichert] = useState(0)
   const [fehler, setFehler] = useState<string | null>(null)
   const [bildIstMm, setBildIstMm] = useState<number | null>(null)
+  const [leerraum, setLeerraum] = useState<Leerraum[]>([])
+  const [fassung, setFassung] = useState(0) // zählt fertige Umbrüche (Seitenminiaturen auffrischen)
+  const [suche, setSuche] = useState('')
+  const [treffer, setTreffer] = useState<Treffer[]>([])
+  const [trefferAktiv, setTrefferAktiv] = useState(0)
+  const [zielSeiten, setZielSeiten] = useState<number | undefined>(undefined)
+  const [status, setStatus] = useState<{ laeuft: boolean; text: string | null }>({ laeuft: false, text: null })
+  const suchfeld = useRef<HTMLInputElement>(null)
   const vorschau = useRef<VorschauSteuerung>(null)
 
   // Neuester Stand jeder Layout-Datei – schneller als das neu aufgebaute Dokument, damit schnelle Folgeänderungen nichts verlieren
@@ -175,8 +204,14 @@ export function App() {
     versuchen(() => mappenSchreiben(geladen.vault, neu))
   }
 
-  function aktiveMappeAendern(aendern: Parameters<typeof mappeAendern>[2]) {
-    if (aktivId) mappenAendern((d) => mappeAendern(d, aktivId, aendern))
+  /** Inhalt der aktiven Mappe ändern (Notizen, Reihenfolge, Anschließen, Tinte sparen …) – mit Rückgängig. */
+  function aktiveMappeAendern(aendern: (m: Mappe) => Mappe) {
+    schrittAusfuehren([], aendern)
+  }
+
+  /** Mappe ohne neuen Rückgängig-Schritt setzen (für Rückgängig/Wiederholen selbst). */
+  function mappeSetzen(id: string, mappe: Mappe) {
+    mappenAendern((d) => mappeAendern(d, id, () => mappe))
   }
 
   function mappeOeffnen(id: string) {
@@ -265,18 +300,39 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geladen, mappenSchluessel, stand])
 
-  // Neu laden, wenn eine Notiz in Obsidian gespeichert wurde
+  // Neu laden, wenn eine Notiz oder ein Bild in Obsidian geändert wurde. Verglichen wird mit dem Stand beim
+  // Aufbau, damit auch ein Speichern während des Aufbaus auffällt. Die Dateiliste wird mit eingelesen:
+  // ein neu eingefügtes Bild („Pasted image …“) gibt es sonst noch nicht.
   useEffect(() => {
     if (!geladen || !dokument) return
-    const pfade = dokument.notizen.map((n) => n.pfad)
-    let letzter: number | null = null
+    const bekannt = new Map(dokument.quellen)
+    let laeuft = false
     const timer = setInterval(async () => {
-      const zeit = Math.max(...(await Promise.all(pfade.map((p) => geladen.vault.geaendertAm(p).catch(() => 0)))))
-      if (letzter !== null && zeit !== letzter) setStand((s) => s + 1)
-      letzter = zeit
-    }, 2000)
+      if (laeuft) return
+      laeuft = true
+      try {
+        const pfade = [...bekannt.keys()]
+        const zeiten = await Promise.all(pfade.map((p) => stempel(geladen.vault, p)))
+        const geaendert = pfade.filter((p, i) => zeiten[i] !== bekannt.get(p))
+        if (geaendert.length === 0) return
+        geaendert.forEach((p) => bekannt.set(p, zeiten[pfade.indexOf(p)]))
+        await geladen.vault.aktualisieren()
+        setStand((s) => s + 1)
+      } catch (e) {
+        setFehler((e as Error).message)
+      } finally {
+        laeuft = false
+      }
+    }, 1500)
     return () => clearInterval(timer)
   }, [geladen, dokument])
+
+  // Ergebnis des automatischen Formatierens eine Weile in der Statusleiste zeigen
+  useEffect(() => {
+    if (status.laeuft || !status.text) return
+    const t = setTimeout(() => setStatus({ laeuft: false, text: null }), 12_000)
+    return () => clearTimeout(t)
+  }, [status])
 
   // Breite des gewählten Bildes messen (nach jedem Umbruch neu)
   useEffect(() => {
@@ -314,28 +370,198 @@ export function App() {
     return layouts.current.get(teil.pfad) ?? teil.layout
   }
 
-  function layoutAendern(pfad: string, aendern: (l: LayoutDatei) => LayoutDatei) {
+  /** Beschädigte Layout-Datei nie überschreiben – sonst wären alle bisherigen Einträge darin verloren. */
+  function layoutGesperrt(pfad: string): boolean {
     const teil = dokument?.notizen.find((n) => n.pfad === pfad)
-    if (!teil) return
-    const vorher = layoutVon(teil)
-    const nachher = aendern(vorher)
-    if (JSON.stringify(vorher) === JSON.stringify(nachher)) return
-    setVerlauf((v) => ({ zurueck: [...v.zurueck.slice(-MAX_VERLAUF + 1), { pfad, vorher, nachher }], vor: [] }))
-    versuchen(() => layoutSchreiben(nachher))
+    if (!teil?.layoutKaputt) return false
+    setFehler(`Die Layout-Datei von „${teil.titel}“ ist beschädigt. Bitte reparieren oder löschen, dann Aktualisieren (F5).`)
+    return true
+  }
+
+  function layoutAendern(pfad: string, aendern: (l: LayoutDatei) => LayoutDatei) {
+    schrittAusfuehren([{ pfad, aendern }])
+  }
+
+  function layoutsAendern(aenderungen: LayoutAenderung[]) {
+    schrittAusfuehren(aenderungen)
+  }
+
+  /**
+   * Layouts mehrerer Notizen und/oder die aktive Mappe ändern – zusammen ein Schritt für Rückgängig.
+   * Liefert false, wenn nichts zu ändern war.
+   */
+  function schrittAusfuehren(aenderungen: LayoutAenderung[], mappeNeu?: (m: Mappe) => Mappe): boolean {
+    const schritt: Schritt = { layouts: [] }
+    for (const { pfad, aendern } of aenderungen) {
+      const teil = dokument?.notizen.find((n) => n.pfad === pfad)
+      if (!teil || layoutGesperrt(pfad)) return false
+      const vorher = layoutVon(teil)
+      const nachher = aendern(vorher)
+      if (JSON.stringify(vorher) !== JSON.stringify(nachher)) schritt.layouts.push({ pfad, vorher, nachher })
+    }
+    const mappeVorher = mappenRef.current.mappen.find((m) => m.id === aktivId)
+    if (mappeNeu && mappeVorher) {
+      const nachher = mappeNeu(mappeVorher)
+      if (JSON.stringify(mappeVorher) !== JSON.stringify(nachher)) schritt.mappe = { id: mappeVorher.id, vorher: mappeVorher, nachher }
+    }
+    if (schritt.layouts.length === 0 && !schritt.mappe) return false
+    setVerlauf((v) => ({ zurueck: [...v.zurueck.slice(-MAX_VERLAUF + 1), schritt], vor: [] }))
+    anwenden(schritt, 'nachher')
+    return true
+  }
+
+  function anwenden(schritt: Schritt, stand: 'vorher' | 'nachher') {
+    if (schritt.mappe) mappeSetzen(schritt.mappe.id, schritt.mappe[stand])
+    if (schritt.layouts.length > 0) versuchen(() => Promise.all(schritt.layouts.map((a) => layoutSchreiben(a[stand]))).then(() => {}))
   }
 
   function zurueck() {
     const schritt = verlauf.zurueck.at(-1)
-    if (!schritt) return
+    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
     setVerlauf((v) => ({ zurueck: v.zurueck.slice(0, -1), vor: [...v.vor, schritt] }))
-    versuchen(() => layoutSchreiben(schritt.vorher))
+    anwenden(schritt, 'vorher')
   }
 
   function vor() {
     const schritt = verlauf.vor.at(-1)
-    if (!schritt) return
+    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
     setVerlauf((v) => ({ zurueck: [...v.zurueck, schritt], vor: v.vor.slice(0, -1) }))
-    versuchen(() => layoutSchreiben(schritt.nachher))
+    anwenden(schritt, 'nachher')
+  }
+
+  /**
+   * Alle manuellen Änderungen an Blöcken, die auf dieser Seite beginnen, verwerfen (Seite wie automatisch).
+   * Ohne Nummer: die Seite des gewählten Blocks, sonst die gerade sichtbare.
+   */
+  function seiteZuruecksetzen() {
+    if (!dokument) return
+    const nummer = (auswahl ? vorschau.current?.seiteVonBlock(auswahl) : null) ?? seite
+    const ids = new Set(vorschau.current?.bloeckeAufSeite(nummer) ?? [])
+    const aenderungen: LayoutAenderung[] = dokument.notizen
+      .filter((t) => t.bloecke.some((b) => ids.has(b.id)))
+      .map((t) => ({
+        pfad: t.pfad,
+        aendern: (l) => ({ ...l, items: l.items.filter((e) => !ids.has(blockFinden(e.anchor, t.bloecke)?.block.id ?? '')) }),
+      }))
+    const geaendert = schrittAusfuehren(aenderungen)
+    setStatus({
+      laeuft: false,
+      text: geaendert ? `Seite ${nummer} zurückgesetzt (Rückgängig: Strg+Z)` : `Auf Seite ${nummer} gibt es keine manuellen Änderungen`,
+    })
+  }
+
+  /** Komplett neu anfangen: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“ zurück auf automatisch. */
+  function allesZuruecksetzen() {
+    if (!dokument || !aktiveMappe) return
+    if (!confirm(`Alle manuellen Änderungen in der Mappe „${aktiveMappe.name}“ verwerfen?\n\nUmbrüche, Bildgrößen, Schrift, Ausgeblendetes, „Direkt anschließen“ und „Tinte sparen“ werden zurückgesetzt. Notizen, Reihenfolge, Auszüge und eingefügte Notizen bleiben. Rückgängig ist möglich.`)) return
+    const geaendert = schrittAusfuehren(
+      dokument.notizen.map((t) => ({ pfad: t.pfad, aendern: layoutZuruecksetzen })),
+      mappeZuruecksetzen,
+    )
+    setStatus({ laeuft: false, text: geaendert ? 'Alles zurückgesetzt (Rückgängig: Strg+Z)' : 'Es gibt keine manuellen Änderungen' })
+  }
+
+  /**
+   * Größte Grundschrift (mit passendem Zeilenabstand), bei der die Mappe auf `ziel` Seiten passt. Gemessen wird
+   * unsichtbar mit Paged.js; das Ergebnis landet als normale Notiz-Einstellung in den Layout-Dateien – also danach
+   * frei änderbar und mit einem Schritt rückgängig zu machen.
+   */
+  function automatischFormatieren(ziel: number) {
+    const steuerung = vorschau.current
+    if (!dokument || !steuerung || status.laeuft) return
+    if (dokument.notizen.some((n) => layoutGesperrt(n.pfad))) return
+    setStatus({ laeuft: true, text: `Formatiere auf ${ziel} ${ziel === 1 ? 'Seite' : 'Seiten'} …` })
+    versuchen(async () => {
+      try {
+        const gemessen = new Map<number, number>()
+        const messen = async (i: number) => {
+          const [pt, lh] = STUFEN[i]
+          const schrift = (inhalt: DocumentFragment) =>
+            inhalt.querySelectorAll<HTMLElement>('article.notiz').forEach((a) => {
+              a.style.fontSize = `${pt}pt`
+              a.style.lineHeight = String(lh)
+            })
+          if (!gemessen.has(i)) gemessen.set(i, await steuerung.seitenMessen(schrift))
+          return gemessen.get(i)!
+        }
+        // Binäre Suche: Seitenzahl sinkt mit kleinerer Schrift
+        let unten = 0
+        let oben = STUFEN.length - 1
+        let bester = -1
+        while (unten <= oben) {
+          const mitte = (unten + oben) >> 1
+          if ((await messen(mitte)) <= ziel) {
+            bester = mitte
+            oben = mitte - 1
+          } else unten = mitte + 1
+        }
+        const wahl = bester >= 0 ? bester : STUFEN.length - 1
+        const [pt, lh] = STUFEN[wahl]
+        const seitenZahl = await messen(wahl)
+        layoutsAendern(
+          dokument.notizen.map((n) => ({
+            pfad: n.pfad,
+            aendern: (l: LayoutDatei) => notizSchriftSetzen(l, { fontSizePt: pt === 10.5 ? undefined : pt, lineHeight: lh === 1.35 ? undefined : lh }),
+          })),
+        )
+        const werte = `${zahlText(pt)} pt, Zeilenabstand ${zahlText(lh)}`
+        setStatus({
+          laeuft: false,
+          text:
+            bester >= 0
+              ? `Automatisch formatiert: ${werte} → ${seitenZahl} ${seitenZahl === 1 ? 'Seite' : 'Seiten'}`
+              : `Passt nicht auf ${ziel} ${ziel === 1 ? 'Seite' : 'Seiten'}: kleinste Stufe (${werte}) ergibt ${seitenZahl} Seiten – Umbrüche und Leerraum prüfen`,
+        })
+      } catch (e) {
+        setStatus({ laeuft: false, text: null })
+        throw e
+      }
+    })
+  }
+
+  /** Knopf an einer Leerraum-Markierung bzw. in den Hinweisen */
+  function leerraumBeheben(l: Leerraum) {
+    if (!l.block) return
+    const teil = dokument?.notizen.find((n) => n.pfad === l.notiz)
+    if (l.art === 'umbruch') blockAendern(l.block, umbruchSetzen(undefined))
+    else if (l.art === 'teilen') blockAendern(l.block, teilenSetzen(true))
+    else if (l.art === 'tabelle') blockAendern(l.block, tabelleSetzen({ split: true }))
+    else if (l.art === 'bild') {
+      blockGewaehlt(l.block)
+      springen(l.block)
+    } else if (l.art === 'notiz' && teil && aktiveMappe) {
+      const eintrag = aktiveMappe.items[teil.mappenIndex]
+      // Notizen aus einer Reihenfolgedatei haben keinen eigenen Mappen-Eintrag
+      if (eintrag?.note === teil.pfad) aktiveMappeAendern(eintragSetzen(teil.mappenIndex, { newPage: false }))
+      else setFehler(`„${teil.titel}“ stammt aus einer Reihenfolgedatei und kann nicht einzeln anschließen.`)
+    }
+  }
+
+  function einbettungUmschalten(notiz: string, ziel: string, an: boolean) {
+    layoutAendern(notiz, (l) => einbettungSetzen(l, ziel, an))
+  }
+
+  function suchen(begriff: string) {
+    setSuche(begriff)
+    setTrefferAktiv(0)
+  }
+
+  function trefferWechseln(schritt: number) {
+    if (treffer.length > 0) setTrefferAktiv((i) => (i + schritt + treffer.length) % treffer.length)
+  }
+
+  function sucheOeffnen() {
+    setNav(true)
+    setTimeout(() => {
+      suchfeld.current?.focus()
+      suchfeld.current?.select()
+    }, 0)
+  }
+
+  function fertig(f: Fertig) {
+    setSeiten(f.seiten)
+    setLeerraum(f.leerraum)
+    setFassung((n) => n + 1)
   }
 
   /** Block per ID finden, mit seiner Notiz und dem aktuellen Layout-Eintrag. */
@@ -398,6 +624,8 @@ export function App() {
     let erledigt = true
     if (k === 'f5') aktualisieren()
     else if (strg && k === 'p') drucken()
+    else if (strg && k === 'f') sucheOeffnen()
+    else if (k === 'f3') trefferWechseln(e.shiftKey ? -1 : 1)
     else if (imFeld) erledigt = false
     else if (strg && k === 'z' && !e.shiftKey) zurueck()
     else if (strg && (k === 'y' || (k === 'z' && e.shiftKey))) vor()
@@ -429,6 +657,8 @@ export function App() {
     tabelleBreite: (id, prozent) => blockAendern(id, tabelleSetzen({ widthPct: prozent >= 100 ? undefined : prozent })),
     taste: (e) => taste.current(e),
     seite: setSeite,
+    leerraum: (i) => leerraum[i] && leerraumBeheben(leerraum[i]),
+    einbettung: (notiz, ziel) => einbettungUmschalten(notiz, ziel, true),
   }
 
   const springen = useCallback((id: string) => {
@@ -466,7 +696,15 @@ export function App() {
     )
   }
 
-  const hinweise = [...geladen.hinweise, ...(dokument?.hinweise ?? [])]
+  const leerraumHinweise: Hinweis[] = leerraum.map((l) => ({
+    stufe: 'gelb',
+    notiz: l.notiz,
+    text: leerraumText(l),
+    art: 'leerraum',
+    leerraum: l,
+    block: l.block ?? undefined,
+  }))
+  const hinweise = [...geladen.hinweise, ...(dokument?.hinweise ?? []), ...leerraumHinweise]
   const probleme = hinweise.filter((h) => h.stufe !== 'info').length
   const notizLayout = aktuelleNotiz ? layoutVon(aktuelleNotiz) : null
   const notizSchrift = { fontSizePt: notizLayout?.settings.fontSizePt, lineHeight: notizLayout?.settings.lineHeight }
@@ -524,6 +762,17 @@ export function App() {
         onHinweise={setHinweiseOffen}
         zeichen={zeichen}
         onZeichen={setZeichen}
+        tinteSparen={!!aktiveMappe?.inkSaving}
+        onTinteSparen={(an) => aktiveMappeAendern(tinteSparenSetzen(an))}
+        seiten={seiten}
+        zielSeiten={zielSeiten}
+        onZielSeiten={setZielSeiten}
+        formatieren={dokument ? () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)) : null}
+        formatiertLaeuft={status.laeuft}
+        onSuche={sucheOeffnen}
+        seiteZuruecksetzen={dokument ? seiteZuruecksetzen : null}
+        seiteNummer={(auswahl ? vorschau.current?.seiteVonBlock(auswahl) : null) ?? seite}
+        allesZuruecksetzen={dokument ? allesZuruecksetzen : null}
       />
 
       {nav && (
@@ -543,6 +792,19 @@ export function App() {
           onSprung={springen}
           onAusblenden={(id, wert) => blockAendern(id, ausblendenSetzen(wert))}
           onSchliessen={() => setNav(false)}
+          suchfeld={suchfeld}
+          suche={suche}
+          onSuche={suchen}
+          treffer={treffer}
+          trefferAktiv={trefferAktiv}
+          onTreffer={setTrefferAktiv}
+          onTrefferWechseln={trefferWechseln}
+          seite={seite}
+          seiten={seiten}
+          leerraumSeiten={leerraum.map((l) => l.seite)}
+          fassung={fassung}
+          miniaturHtml={() => vorschau.current?.miniaturHtml() ?? null}
+          onSeite={(n) => vorschau.current?.zuSeite(n)}
         />
       )}
 
@@ -565,9 +827,16 @@ export function App() {
             zoom={zoom}
             auswahl={auswahl}
             zeichen={zeichen}
-            baut={baut}
+            baut={baut || status.laeuft}
+            tinteSparen={!!aktiveMappe?.inkSaving}
+            suche={suche}
+            trefferAktiv={trefferAktiv}
+            onTreffer={(t) => {
+              setTreffer(t)
+              setTrefferAktiv((i) => Math.min(i, Math.max(0, t.length - 1)))
+            }}
             rueckrufe={rueckrufe}
-            onFertig={setSeiten}
+            onFertig={fertig}
           />
         ) : (
           <div className="leer-hinweis">
@@ -585,6 +854,9 @@ export function App() {
           onEinblenden={(notiz, i) => layoutAendern(notiz, (l) => eintragAnIndex(l, i, ausblendenSetzen(false)))}
           onZuweisen={(notiz, index) => setZuweisen({ notiz, index })}
           onLoeschen={(notiz, i) => layoutAendern(notiz, (l) => eintragLoeschen(l, i))}
+          onEinbettung={einbettungUmschalten}
+          onLeerraum={leerraumBeheben}
+          leerraumKnopf={(l) => (l.art && l.block ? LEERRAUM_KNOPF[l.art] : null)}
           onSchliessen={() => setHinweiseOffen(false)}
         />
       )}
@@ -594,7 +866,7 @@ export function App() {
         seiten={seiten}
         notizen={dokument?.notizen.length ?? 0}
         probleme={probleme}
-        meldung={zuweisen ? 'Block anklicken, dem der Layout-Eintrag zugewiesen wird – Esc bricht ab' : null}
+        meldung={zuweisen ? 'Block anklicken, dem der Layout-Eintrag zugewiesen wird – Esc bricht ab' : status.text}
         onHinweise={() => setHinweiseOffen(!hinweiseOffen)}
         zoom={zoom}
         onZoom={setZoom}
@@ -612,6 +884,10 @@ export function App() {
       )}
     </div>
   )
+}
+
+function zahlText(z: number): string {
+  return String(z).replace('.', ',')
 }
 
 function listeLesen(json: string | null): string[] {

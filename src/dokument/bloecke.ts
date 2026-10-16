@@ -77,6 +77,8 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     const zurNotiz = el.classList.contains('footnotes') || el.classList.contains('footnotes-sep')
     if (zurNotiz) wurzel.append(el)
     else if (ebene !== 1) stapel[stapel.length - 1].el.append(el)
+    // Platzhalter einer nicht eingefügten Notiz ist kein Block (sonst verschöbe er die Zählung der Absätze)
+    if (el.classList.contains('nur-einbettung')) continue
 
     const typ: BlockTyp = ebene ? 'heading' : blockTyp(el)
     const bildname = typ === 'image' ? el.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined
@@ -124,43 +126,77 @@ function blockTyp(el: HTMLElement): BlockTyp {
 
 function leereAbsaetzeEntfernen(wurzel: HTMLElement) {
   for (const p of wurzel.querySelectorAll('p')) {
-    if (!p.textContent?.trim() && !p.querySelector('img, .bild-fehlt, input, .katex')) p.remove()
+    if (!p.textContent?.trim() && !p.querySelector('img, .bild-fehlt, input, .katex, .einbettung')) p.remove()
   }
 }
 
 /**
- * Ein Absatz nur mit einem Bild wird zu figure; eine vollständig kursive Zeile direkt darunter
- * (im selben Absatz nach <br> oder als nächster Absatz) wird zur Beschriftung.
+ * Jede Zeile eines Absatzes, die nur aus Bildern besteht, wird zu einer eigenen figure (eigener Block: Größe,
+ * Ausrichtung, Ziehen). Eine vollständig kursive Zeile direkt darunter (im selben Absatz nach <br> oder als
+ * nächster Absatz) wird zur Beschriftung. Übrige Zeilen bleiben als Absatz stehen, Bilder mitten im Satz auch.
  */
 function bilderMitBeschriftung(wurzel: HTMLElement) {
   const dok = wurzel.ownerDocument
-  for (const p of [...wurzel.querySelectorAll(':scope > p')] as HTMLElement[]) {
-    const knoten = [...p.childNodes].filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()))
-    if (knoten[0]?.nodeName !== 'IMG') continue
+  const sichtbar = (zeile: Node[]) => zeile.filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()))
+  const nurBilder = (zeile: Node[]) => sichtbar(zeile).length > 0 && sichtbar(zeile).every((n) => n.nodeName === 'IMG')
+  const nurKursiv = (zeile: Node[]) => sichtbar(zeile).length === 1 && sichtbar(zeile)[0].nodeName === 'EM'
 
-    let beschriftung: Element | null = null
-    if (knoten.length === 3 && knoten[1].nodeName === 'BR' && knoten[2].nodeName === 'EM') {
-      beschriftung = knoten[2] as Element
-    } else if (knoten.length !== 1) {
-      continue // Bild mitten im Text bleibt, wo es ist
-    } else {
-      const naechster = p.nextElementSibling
-      const inhalt = naechster ? [...naechster.childNodes].filter((n) => n.textContent?.trim()) : []
-      if (naechster?.tagName === 'P' && inhalt.length === 1 && inhalt[0].nodeName === 'EM') {
-        beschriftung = inhalt[0] as Element
+  function beschriften(figure: HTMLElement, em: Node) {
+    const caption = dok.createElement('figcaption')
+    caption.append(em)
+    figure.append(caption)
+  }
+
+  for (const p of [...wurzel.querySelectorAll(':scope > p')] as HTMLElement[]) {
+    if (!p.parentElement) continue // war Beschriftung des vorigen Bildes
+    const zeilen: Node[][] = [[]]
+    for (const n of [...p.childNodes]) {
+      if (n.nodeName === 'BR') zeilen.push([])
+      else zeilen[zeilen.length - 1].push(n)
+    }
+    if (!zeilen.some(nurBilder)) continue
+
+    const neu: HTMLElement[] = []
+    let text: Node[][] = []
+    const textAbschliessen = () => {
+      if (text.some((z) => sichtbar(z).length > 0)) {
+        const absatz = dok.createElement('p')
+        text.forEach((z, i) => {
+          if (i > 0) absatz.append(dok.createElement('br'))
+          absatz.append(...z)
+        })
+        neu.push(absatz)
+      }
+      text = []
+    }
+    for (const zeile of zeilen) {
+      const vorher = neu[neu.length - 1]
+      if (nurBilder(zeile)) {
+        textAbschliessen()
+        for (const img of sichtbar(zeile)) {
+          const figure = dok.createElement('figure')
+          figure.className = 'bild-block'
+          figure.append(img)
+          neu.push(figure)
+        }
+      } else if (nurKursiv(zeile) && text.length === 0 && vorher?.tagName === 'FIGURE' && !vorher.querySelector('figcaption')) {
+        beschriften(vorher, sichtbar(zeile)[0])
+      } else {
+        text.push(zeile)
+      }
+    }
+    textAbschliessen()
+
+    const letzte = neu[neu.length - 1]
+    const naechster = p.nextElementSibling
+    if (letzte.tagName === 'FIGURE' && !letzte.querySelector('figcaption') && naechster?.tagName === 'P') {
+      const inhalt = [...naechster.childNodes].filter((n) => n.textContent?.trim())
+      if (inhalt.length === 1 && inhalt[0].nodeName === 'EM') {
+        beschriften(letzte, inhalt[0])
         naechster.remove()
       }
     }
-
-    const figure = dok.createElement('figure')
-    figure.className = 'bild-block'
-    figure.append(knoten[0])
-    if (beschriftung) {
-      const caption = dok.createElement('figcaption')
-      caption.append(beschriftung)
-      figure.append(caption)
-    }
-    p.replaceWith(figure)
+    p.replaceWith(...neu)
   }
 }
 

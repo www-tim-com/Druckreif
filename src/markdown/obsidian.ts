@@ -27,14 +27,15 @@ export function obsidianPlugin(md: MarkdownIt): void {
   md.renderer.rules.image = (tokens, i, opt, env, self) => {
     const src = String(tokens[i].attrGet('src') ?? '')
     if (/^[a-z]+:/i.test(src)) return bildStandard(tokens, i, opt, env, self)
-    return bildHtml({ name: decodeURIComponent(src), alt: tokens[i].content }, kontext(env))
+    return bildHtml({ name: dekodieren(src), alt: tokens[i].content }, kontext(env))
   }
 
   const fenceStandard = md.renderer.rules.fence!
   md.renderer.rules.fence = (tokens, i, opt, env, self) => {
     const sprache = tokens[i].info.trim().split(/\s+/)[0].toLowerCase()
     if (sprache === 'mermaid') {
-      return `<div class="mermaid-diagramm" data-quelle="${md.utils.escapeHtml(tokens[i].content)}"></div>\n`
+      // kodiert: „-->“ in einem Attribut würde saeubern() sonst samt Quelle entfernen
+      return `<div class="mermaid-diagramm" data-quelle="${encodeURIComponent(tokens[i].content)}"></div>\n`
     }
     if (PLUGIN_BLOECKE.includes(sprache)) {
       kontext(env).hinweis('info', `Plugin-Block „${sprache}“ nicht ausgegeben`)
@@ -46,6 +47,25 @@ export function obsidianPlugin(md: MarkdownIt): void {
 
 function kontext(env: unknown): UmwandelKontext {
   return env as UmwandelKontext
+}
+
+/** %20 usw. auflösen; Dateinamen mit einem echten % (z. B. „50%.png“) bleiben, wie sie sind. */
+export function dekodieren(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
+/** Ziel einer eingebetteten Notiz aus dem Inhalt von ![[…]]: ohne |Anzeigetext, mit #Abschnitt. */
+export function einbettungsZiel(inhalt: string): string {
+  return inhalt.replace(/\\\|/g, '|').split('|')[0].trim()
+}
+
+/** Dateiname aus dem Inhalt von ![[…]]: ohne |Größe und ohne #Abschnitt (in Tabellen steht \| statt |). */
+export function bildZiel(inhalt: string): string {
+  return inhalt.replace(/\\\|/g, '|').split('|')[0].split('#')[0].trim()
 }
 
 // ---- [[Wikilinks]] und ![[Einbettungen]] ----
@@ -65,17 +85,22 @@ function wikilink(state: StateInline, silent: boolean): boolean {
   const anzeige = rest.join('|')
   const env = kontext(state.env)
 
-  if (einbettung && BILD_ENDUNGEN.includes(endung(ziel.split('#')[0]))) {
+  if (einbettung && BILD_ENDUNGEN.includes(endung(bildZiel(ziel)))) {
     const token = state.push('obsidian_bild', 'img', 0)
     const groesse = /^(\d+)(?:x(\d+))?$/.exec(anzeige.trim())
     token.meta = {
-      name: ziel.trim(),
+      name: bildZiel(ziel),
       breite: groesse ? Number(groesse[1]) : undefined,
       hoehe: groesse?.[2] ? Number(groesse[2]) : undefined,
       alt: groesse ? '' : anzeige,
     }
   } else if (einbettung) {
-    env.hinweis('info', `Eingebettete Notiz „${ziel}“ nicht eingefügt`)
+    // Platzhalter: aufbauen.ts ersetzt ihn durch den Inhalt oder lässt ihn als Hinweis auf dem Bildschirm stehen
+    const zielText = einbettungsZiel(ziel)
+    const eingefuegt = env.einbettung?.(zielText) ?? false
+    if (!env.einbettung) env.hinweis('info', `Eingebettete Notiz „${zielText}“ in einer eingebetteten Notiz – nicht eingefügt`)
+    const token = state.push('html_inline', '', 0)
+    token.content = `<span class="einbettung${eingefuegt ? ' eingefuegt' : ''}${env.einbettung ? '' : ' verschachtelt'}" data-ziel="${state.md.utils.escapeHtml(zielText)}"></span>`
   } else {
     // Link wird normaler Text: Anzeigetext, sonst Notizname ohne #Abschnitt
     const text = state.push('text', '', 0)

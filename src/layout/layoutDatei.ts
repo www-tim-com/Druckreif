@@ -57,13 +57,20 @@ export interface LayoutEintrag {
   fontSizePt?: number
   lineHeight?: number
   table?: TabellenLayout
+  /** Erweiterung: darf über Seiten geteilt werden (bei Überschriften der ganze Abschnitt) – gegen halb leere Seiten */
+  split?: boolean
 }
 
 export interface LayoutDatei {
   version: 1
   note: string
   title: string
-  settings: { fontSizePt?: number; lineHeight?: number }
+  settings: {
+    fontSizePt?: number
+    lineHeight?: number
+    /** Erweiterung: eingebettete Notizen (![[Ziel]], Ziel wie in der Notiz geschrieben), die eingefügt werden */
+    embeds?: string[]
+  }
   items: LayoutEintrag[]
 }
 

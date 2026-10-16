@@ -3,13 +3,13 @@
 
 import type { Hinweis, Stufe } from '../hinweise'
 import { layoutAnwenden } from '../layout/zuordnen'
-import { type LayoutDatei, layoutLaden } from '../layout/layoutDatei'
-import { bilderFinden, markdownUmwandeln } from '../markdown/umwandeln'
+import { type LayoutDatei, layoutLaden, layoutPfad, leeresLayout } from '../layout/layoutDatei'
+import { bilderFinden, einbettungenFinden, markdownUmwandeln } from '../markdown/umwandeln'
 import { anhangOrdnerFuer, type VaultEinstellungen } from '../stil/stil'
-import { reihenfolgeLesen } from '../vault/notizen'
+import { frontmatterLesen, reihenfolgeLesen } from '../vault/notizen'
 import { type Vault, dateiFinden, dateiname, ohneEndung, ordner } from '../vault/vault'
 import type { MappenEintrag } from '../mappen/mappen'
-import { type Block, gliedern } from './bloecke'
+import { type Block, gliedern, normalisieren } from './bloecke'
 import { diagrammeZeichnen } from './diagramme'
 
 export interface NotizTeil {
@@ -24,6 +24,8 @@ export interface NotizTeil {
   /** ##-Abschnitte der Notiz, zur Auswahl „nur einzelne Abschnitte“ */
   abschnitte: string[]
   hatEinleitung: boolean
+  /** Layout-Datei ist beschädigt: nicht überschreiben, bis der Nutzer sie repariert hat */
+  layoutKaputt?: boolean
 }
 
 export interface Dokument {
@@ -31,6 +33,13 @@ export interface Dokument {
   html: string
   notizen: NotizTeil[]
   hinweise: Hinweis[]
+  /** Änderungszeit jeder gelesenen Datei (Notizen, Reihenfolgen, Bilder) beim Aufbau – zum Erkennen von Änderungen */
+  quellen: Map<string, number>
+}
+
+/** Änderungszeit oder -1, wenn es die Datei nicht (mehr) gibt. Vor dem Lesen nehmen: späteres Speichern fällt dann auf. */
+export function stempel(vault: Vault, pfad: string): Promise<number> {
+  return vault.geaendertAm(pfad).catch(() => -1)
 }
 
 /**
@@ -44,6 +53,7 @@ export async function dokumentAufbauen(
   titel: string,
 ): Promise<Dokument> {
   const hinweise: Hinweis[] = []
+  const quellen = new Map<string, number>()
   const teile: { pfad: string; eintrag: MappenEintrag; index: number }[] = []
 
   for (const [index, eintrag] of eintraege.entries()) {
@@ -51,6 +61,7 @@ export async function dokumentAufbauen(
       hinweise.push({ stufe: 'rot', notiz: eintrag.note, text: 'Notiz nicht gefunden (umbenannt oder verschoben?) – bitte aus der Mappe entfernen' })
       continue
     }
+    quellen.set(eintrag.note, await stempel(vault, eintrag.note))
     const reihenfolge = reihenfolgeLesen(await vault.lesenText(eintrag.note))
     if (!reihenfolge) teile.push({ pfad: eintrag.note, eintrag, index })
     else for (const pfad of notizenDerReihenfolge(vault, reihenfolge.notizen, eintrag.note, hinweise)) teile.push({ pfad, eintrag: { note: pfad }, index })
@@ -64,14 +75,14 @@ export async function dokumentAufbauen(
   const container = document.createElement('div')
   const notizen: NotizTeil[] = []
   for (const [i, t] of teile.entries()) {
-    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise)
+    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise, quellen)
     container.append(teil.article)
     notizen.push(teil.notiz)
   }
   await diagrammeZeichnen(container, (text) => hinweise.push({ stufe: 'rot', notiz: '', text }))
 
   // Zeichen, die in Dateinamen nicht erlaubt sind, durch Bindestrich ersetzen
-  return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise }
+  return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise, quellen }
 }
 
 function notizenDerReihenfolge(vault: Vault, namen: string[], reihenfolgePfad: string, hinweise: Hinweis[]): string[] {
@@ -95,23 +106,49 @@ async function notizAufbauen(
   mappenIndex: number,
   einstellungen: VaultEinstellungen,
   hinweise: Hinweis[],
+  quellen: Map<string, number>,
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
   const name = ohneEndung(dateiname(pfad))
+  if (!quellen.has(pfad)) quellen.set(pfad, await stempel(vault, pfad))
   const text = await vault.lesenText(pfad)
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
-  // Bilder vorab laden, weil markdown-it synchron arbeitet
-  const notizOrdner = ordner(pfad)
-  const anhang = anhangOrdnerFuer(einstellungen.anhangOrdner, notizOrdner)
-  const bildUrls = new Map<string, string | null>()
-  for (const bild of bilderFinden(text)) {
-    const treffer = dateiFinden(vault, bild, notizOrdner, anhang)
-    bildUrls.set(bild, typeof treffer === 'string' ? await bildUrl(vault, treffer) : null)
+  // Layout zuerst: es sagt, welche eingebetteten Notizen eingefügt werden
+  let layout: LayoutDatei
+  let layoutFehler: string | null = null
+  try {
+    layout = await layoutLaden(vault, pfad, name)
+  } catch (fehler) {
+    layoutFehler = (fehler as Error).message
+    layout = leeresLayout(pfad, name)
+  }
+  const einfuegen = new Set(Array.isArray(layout.settings.embeds) ? layout.settings.embeds : [])
+
+  // Bilder und eingebettete Notizen vorab laden, weil markdown-it synchron arbeitet
+  const bildUrls = await bilderLaden(vault, text, pfad, einstellungen, quellen)
+  const einbettungen = new Map<string, string | null>()
+  for (const ziel of einbettungenFinden(text)) {
+    if (einfuegen.has(ziel)) einbettungen.set(ziel, await einbettungAufbauen(vault, ziel, pfad, einstellungen, quellen, hinweis))
   }
 
   const html = markdownUmwandeln(
     text,
-    { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis },
+    {
+      bildUrl: (n) => bildUrls.get(n) ?? null,
+      hinweis,
+      einbettung: (ziel) => {
+        const inhalt = einbettungen.get(ziel)
+        // Nie stillschweigend weglassen: jede Einbettung steht in den Hinweisen, mit Knopf zum Umschalten
+        hinweise.push({
+          stufe: 'info',
+          notiz: pfad,
+          text: inhalt ? `Eingebettete Notiz „${ziel}“ eingefügt` : `Eingebettete Notiz „${ziel}“ nicht eingefügt`,
+          art: 'einbettung',
+          einbettung: { ziel, eingefuegt: einfuegen.has(ziel) },
+        })
+        return typeof inhalt === 'string'
+      },
+    },
     einstellungen.strictLineBreaks,
   )
 
@@ -119,26 +156,144 @@ async function notizAufbauen(
   article.className = 'notiz'
   article.dataset.notiz = pfad
   article.innerHTML = html
+  einbettungenEinsetzen(article, einbettungen)
   const { titel, bloecke, weitereTitel } = gliedern(article, name, praefix)
   for (const t of weitereTitel) hinweis('info', `Weitere #-Überschrift „${t}“ als Kapitel behandelt`)
+  if (!vault.dateien.includes(layoutPfad(pfad))) layout = { ...layout, title: titel }
 
-  let layout: LayoutDatei
   let zuordnung = new Map<string, number>()
-  try {
-    layout = await layoutLaden(vault, pfad, titel)
-    const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
-    hinweise.push(...angewendet.hinweise)
-    zuordnung = angewendet.zuordnung
-  } catch (fehler) {
-    hinweis('rot', String((fehler as Error).message))
-    layout = { version: 1, note: pfad, title: titel, settings: {}, items: [] }
+  if (!layoutFehler) {
+    try {
+      const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
+      hinweise.push(...angewendet.hinweise)
+      zuordnung = angewendet.zuordnung
+    } catch (fehler) {
+      layoutFehler = `Layout-Datei ${layoutPfad(pfad)} ist ungültig (${(fehler as Error).message})`
+    }
+  }
+  if (layoutFehler) {
+    hinweis('rot', `${layoutFehler} – Änderungen an dieser Notiz sind gesperrt, bis die Datei repariert ist`)
+    layout = leeresLayout(pfad, titel)
   }
   if (eintrag.newPage === false) article.classList.add('anschliessen')
   if (eintrag.sections) abschnitteAuswaehlen(article, eintrag.sections, hinweis)
 
   const abschnitte = [...new Set(bloecke.filter((b) => b.typ === 'heading' && b.pfad.length === 2).map((b) => b.pfad[1]))]
   const hatEinleitung = bloecke.some((b) => b.pfad.length === 1 && b.typ !== 'heading' && b.typ !== 'footnotes')
-  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung } }
+  const layoutKaputt = layoutFehler !== null
+  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
+}
+
+async function bilderLaden(
+  vault: Vault,
+  text: string,
+  notizPfad: string,
+  einstellungen: VaultEinstellungen,
+  quellen: Map<string, number>,
+): Promise<Map<string, string | null>> {
+  const notizOrdner = ordner(notizPfad)
+  const anhang = anhangOrdnerFuer(einstellungen.anhangOrdner, notizOrdner)
+  const bildUrls = new Map<string, string | null>()
+  for (const bild of bilderFinden(text)) {
+    const treffer = dateiFinden(vault, bild, notizOrdner, anhang)
+    if (typeof treffer !== 'string') {
+      bildUrls.set(bild, null)
+      continue
+    }
+    const zeit = await stempel(vault, treffer)
+    quellen.set(treffer, zeit)
+    bildUrls.set(bild, await bildUrl(vault, treffer, zeit))
+  }
+  return bildUrls
+}
+
+/**
+ * Inhalt einer eingebetteten Notiz als HTML (ganze Notiz oder ein #Abschnitt), oder null mit rotem Hinweis.
+ * Eingebettete Notizen darin werden nicht weiter eingefügt.
+ */
+async function einbettungAufbauen(
+  vault: Vault,
+  ziel: string,
+  notizPfad: string,
+  einstellungen: VaultEinstellungen,
+  quellen: Map<string, number>,
+  hinweis: (stufe: Stufe, text: string) => void,
+): Promise<string | null> {
+  const [name, ...anker] = ziel.split('#')
+  const abschnitt = anker.at(-1)?.trim()
+  if (abschnitt?.startsWith('^')) {
+    hinweis('rot', `Eingebettete Notiz „${ziel}“: Verweise auf einzelne Blöcke (^…) werden nicht unterstützt`)
+    return null
+  }
+  const treffer = dateiFinden(vault, /\.md$/i.test(name) ? name.trim() : `${name.trim()}.md`, ordner(notizPfad), '')
+  if (typeof treffer !== 'string') {
+    const grund = treffer ? `mehrdeutig (${treffer.join(', ')})` : 'nicht gefunden'
+    hinweis('rot', `Eingebettete Notiz „${ziel}“ ${grund} – nicht eingefügt`)
+    return null
+  }
+  if (treffer === notizPfad) {
+    hinweis('rot', `Notiz „${ziel}“ bettet sich selbst ein – nicht eingefügt`)
+    return null
+  }
+  quellen.set(treffer, await stempel(vault, treffer))
+  let text = frontmatterLesen(await vault.lesenText(treffer)).rest
+  if (abschnitt) {
+    const teil = abschnittAusschneiden(text, abschnitt)
+    if (teil === null) {
+      hinweis('rot', `Eingebettete Notiz „${ziel}“: Abschnitt „${abschnitt}“ nicht gefunden – nicht eingefügt`)
+      return null
+    }
+    text = teil
+  }
+  const bildUrls = await bilderLaden(vault, text, treffer, einstellungen, quellen)
+  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks)
+}
+
+/** Text ab der Überschrift `titel` bis vor die nächste Überschrift gleicher oder höherer Ebene (Codeblöcke beachtet). */
+export function abschnittAusschneiden(text: string, titel: string): string | null {
+  const zeilen = text.split(/\r?\n/)
+  let start = -1
+  let ebene = 0
+  let imCode = false
+  for (let i = 0; i < zeilen.length; i++) {
+    if (/^\s{0,3}(`{3,}|~{3,})/.test(zeilen[i])) imCode = !imCode
+    if (imCode) continue
+    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(zeilen[i])
+    if (!h) continue
+    if (start < 0 && normalisieren(h[2]) === normalisieren(titel)) {
+      start = i
+      ebene = h[1].length
+    } else if (start >= 0 && h[1].length <= ebene) {
+      return zeilen.slice(start, i).join('\n')
+    }
+  }
+  return start < 0 ? null : zeilen.slice(start).join('\n')
+}
+
+/**
+ * Platzhalter eingefügter Notizen durch ihren Inhalt ersetzen. Steht ein Platzhalter allein im Absatz (der Normalfall),
+ * ersetzt der Inhalt den Absatz; sonst kommt er direkt hinter den Absatz. Nicht eingefügte Platzhalter allein im Absatz
+ * bekommen einen Absatz ohne Höhe (kein Block, damit sich die Zählung der übrigen Blöcke nicht verschiebt).
+ */
+function einbettungenEinsetzen(article: HTMLElement, einbettungen: Map<string, string | null>) {
+  for (const platzhalter of [...article.querySelectorAll<HTMLElement>('span.einbettung')]) {
+    const absatz = platzhalter.parentElement
+    const allein = absatz?.tagName === 'P' && absatz.parentElement === article && !absatz.textContent?.trim() && absatz.querySelectorAll('img, span.einbettung').length === 1
+    const inhalt = einbettungen.get(platzhalter.dataset.ziel ?? '')
+    if (!platzhalter.classList.contains('eingefuegt') || typeof inhalt !== 'string') {
+      if (allein) absatz.classList.add('nur-einbettung')
+      continue
+    }
+    const div = article.ownerDocument.createElement('div')
+    div.className = 'markdown-embed einbettung-inhalt'
+    div.dataset.ziel = platzhalter.dataset.ziel
+    div.innerHTML = inhalt
+    if (allein) absatz.replaceWith(div)
+    else {
+      ;(absatz?.parentElement === article ? absatz : platzhalter).after(div)
+      platzhalter.remove()
+    }
+  }
 }
 
 /**
@@ -156,24 +311,28 @@ function abschnitteAuswaehlen(article: HTMLElement, auswahl: string[], hinweis: 
   hinweis('info', `Nur ausgewählte Abschnitte im Druck: ${namen.join(', ') || 'keine'}`)
 }
 
-// Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden
-const bildCache = new WeakMap<Vault, Map<string, string>>()
+// Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden.
+// Mit Änderungszeit: ein unter gleichem Namen ersetztes Bild wird neu geladen.
+const bildCache = new WeakMap<Vault, Map<string, { url: string; zeit: number }>>()
+
+/** Erst später freigeben: die gerade sichtbare Fassung zeigt die Bilder noch an. */
+function spaeterFreigeben(urls: string[]) {
+  setTimeout(() => urls.forEach((url) => URL.revokeObjectURL(url)), 30_000)
+}
 
 /** Beim Aktualisieren: Bilder neu laden (könnten ersetzt oder verschoben worden sein). */
 export function bilderVergessen(vault: Vault): void {
-  const alt = [...(bildCache.get(vault)?.values() ?? [])]
+  spaeterFreigeben([...(bildCache.get(vault)?.values() ?? [])].map((e) => e.url))
   bildCache.delete(vault)
-  // Erst später freigeben: die gerade sichtbare Fassung zeigt die Bilder noch an
-  setTimeout(() => alt.forEach((url) => URL.revokeObjectURL(url)), 30_000)
 }
 
-async function bildUrl(vault: Vault, pfad: string): Promise<string> {
+async function bildUrl(vault: Vault, pfad: string, zeit: number): Promise<string> {
   let cache = bildCache.get(vault)
   if (!cache) bildCache.set(vault, (cache = new Map()))
-  let url = cache.get(pfad)
-  if (!url) {
-    url = URL.createObjectURL(await vault.lesenBlob(pfad))
-    cache.set(pfad, url)
-  }
+  const alt = cache.get(pfad)
+  if (alt?.zeit === zeit) return alt.url
+  const url = URL.createObjectURL(await vault.lesenBlob(pfad))
+  cache.set(pfad, { url, zeit })
+  if (alt) spaeterFreigeben([alt.url])
   return url
 }

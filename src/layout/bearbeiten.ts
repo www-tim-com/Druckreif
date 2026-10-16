@@ -38,6 +38,11 @@ export function umbruchSetzen(wert: boolean | undefined) {
   return (e: LayoutEintrag): LayoutEintrag => ({ ...e, pageBreakBefore: wert })
 }
 
+/** Darf über Seiten geteilt werden (true) oder bleibt am Stück (automatisch) */
+export function teilenSetzen(wert: boolean) {
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, split: wert || undefined })
+}
+
 export function ausblendenSetzen(wert: boolean) {
   return (e: LayoutEintrag): LayoutEintrag => ({ ...e, hidden: wert || undefined })
 }
@@ -89,12 +94,21 @@ export function eintragZuweisen(layout: LayoutDatei, index: number, block: Block
 }
 
 /** Grundschrift und Zeilenabstand der ganzen Notiz */
-export function notizSchriftSetzen(layout: LayoutDatei, teil: { fontSizePt?: number; lineHeight?: number }): LayoutDatei {
+export function notizSchriftSetzen(layout: LayoutDatei, teil: Partial<LayoutDatei['settings']>): LayoutDatei {
   const settings = { ...layout.settings, ...teil }
   for (const k of Object.keys(settings) as (keyof typeof settings)[]) if (settings[k] === undefined) delete settings[k]
   return { ...layout, settings }
 }
 
+/** Eingebettete Notiz einfügen (an) oder wieder nur als Hinweis führen (aus). */
+export function einbettungSetzen(layout: LayoutDatei, ziel: string, an: boolean): LayoutDatei {
+  const alt = (layout.settings.embeds ?? []).filter((z) => z !== ziel)
+  const embeds = an ? [...alt, ziel] : alt
+  return notizSchriftSetzen(layout, { embeds: embeds.length ? embeds : undefined })
+}
+
 export function layoutZuruecksetzen(layout: LayoutDatei): LayoutDatei {
-  return { ...layout, settings: {}, items: [] }
+  // Eingefügte Notizen sind Inhalt, kein Layout – bleiben beim Zurücksetzen erhalten
+  const { embeds } = layout.settings
+  return { ...layout, settings: embeds ? { embeds } : {}, items: [] }
 }

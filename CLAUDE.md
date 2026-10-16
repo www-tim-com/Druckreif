@@ -40,6 +40,19 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   die sichtbare Fassung nutzt sie noch).
 - Tabellen-Griffe liegen in einer Ebene direkt im body (`.druckreif-ueberlagerung`), nie innerhalb der Tabelle.
 - Die Polyfill-Datei von Paged.js ist nicht über `exports` freigegeben → Import über `/node_modules/...?url`.
+- Notiz-HTML läuft durch DOMPurify (`saeubern()` in `umwandeln.ts`, Entferntes wird als Hinweis gemeldet). Deshalb
+  KaTeX nur als HTML (MathML würde entfernt) und die Mermaid-Quelle URL-kodiert in `data-quelle` (`-->` im Attribut).
+- Automatisch neu laden: `Dokument.quellen` hält die Änderungszeit jeder gelesenen Datei (vor dem Lesen genommen);
+  die App vergleicht alle 1,5 s dagegen und liest bei Änderung auch die Dateiliste neu (neu eingefügte Bilder).
+- `bilderFinden()` und der Wikilink-Renderer müssen dieselben Bildnamen liefern (`bildZiel()`, `dekodieren()`).
+- Leerraum (`vorschau/leerraum.ts`) misst im fertig umbrochenen iframe und nutzt Paged.js' `data-split-from`
+  (Fortsetzung eines geteilten Elements). Markierungen liegen in `.pagedjs_page`, nur Bildschirm.
+- „Automatisch formatieren“ misst in einem dritten, unsichtbaren iframe (`seitenMessen`). Die Probe-Schrift wird als
+  Inline-Stil an `article.notiz` gesetzt – ein zusätzliches Stylesheet mit `!important` kam bei Paged.js nicht an.
+- Seitenminiaturen sind eine Kopie des umbrochenen DOM ohne `<script>` (sonst bricht Paged.js erneut um).
+- Eingebettete Notizen: Platzhalter `span.einbettung` aus dem Wikilink-Renderer; `aufbauen.ts` ersetzt ihn durch den
+  Inhalt (eigener Block) oder lässt ihn in einem `p.nur-einbettung` ohne Höhe stehen, das kein Block ist.
+- Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`) – nie überschreiben.
 
 ## Prüfen
 
