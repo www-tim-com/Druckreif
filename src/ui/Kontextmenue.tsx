@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { AlignCenter, AlignLeft, AlignRight, Ban, EyeOff, RotateCcw, SeparatorHorizontal, WrapText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { LayoutEintrag } from '../layout/layoutDatei'
-import { ausblendenSetzen, bildSetzen, eintragZuruecksetzen, umbruchSetzen } from '../layout/bearbeiten'
+import { ausblendenSetzen, bildSetzen, eintragZuruecksetzen, umbruchSetzen, umfliessenSetzen } from '../layout/bearbeiten'
 
 interface Props {
   x: number
@@ -53,9 +53,9 @@ export function Kontextmenue({ x, y, typ, eintrag: e, blockAendern, onSchliessen
         <>
           <hr />
           {punkt(AlignLeft, 'Links', bildSetzen({ align: 'left' }), bild?.align === 'left')}
-          {punkt(AlignCenter, 'Zentriert', bildSetzen({ align: 'center' }), bild?.align === 'center')}
-          {punkt(AlignRight, 'Rechts', bildSetzen({ align: 'right' }), bild?.align === 'right')}
-          {punkt(WrapText, 'Text daneben', bildSetzen({ wrap: bild?.wrap ? undefined : true }), !!bild?.wrap)}
+          {!bild?.wrap && punkt(AlignCenter, 'Zentriert', bildSetzen({ align: 'center' }), bild?.align === 'center')}
+          {punkt(AlignRight, 'Rechts', bildSetzen({ align: 'right' }), bild?.align === 'right' || (!!bild?.wrap && bild.align !== 'left'))}
+          {punkt(WrapText, 'Text umfließt Bild', umfliessenSetzen(!bild?.wrap), !!bild?.wrap)}
         </>
       )}
       <hr />

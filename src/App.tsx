@@ -19,6 +19,8 @@ import {
   tabelleSetzen,
   teilenSetzen,
   umbruchSetzen,
+  umflussPosition,
+  MAX_BILDVERSATZ_MM,
 } from './layout/bearbeiten'
 import { type LayoutDatei, type LayoutEintrag, layoutSpeichern } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
@@ -648,11 +650,16 @@ export function App() {
     auswahl: blockGewaehlt,
     kontext: (id, x, y) => setKontext({ id, x, y }),
     bildGroesse: (id, mm) => blockAendern(id, bildSetzen({ widthMm: mm })),
-    bildVerschieben: (id, align, dy) =>
+    bildVerschieben: (id, align, dy, bezug) => {
+      // Umfließendes Bild: an den Block unter der neuen Oberkante hängen (nur im eigenen Abschnitt)
+      const bloecke = blockSuchen(id)?.teil.bloecke ?? []
+      const position = bezug ? umflussPosition(bloecke, id, bezug.block, bezug.versatzMm) : null
       blockAendern(id, (e) => {
-        const versatz = Math.min(150, Math.max(-30, (e.image?.offsetYMm ?? 0) + dy))
+        if (position) return bildSetzen({ align, ...position })(e)
+        const versatz = Math.min(MAX_BILDVERSATZ_MM, Math.max(e.image?.wrap ? 0 : -30, (e.image?.offsetYMm ?? 0) + dy))
         return bildSetzen({ align, offsetYMm: versatz || undefined })(e)
-      }),
+      })
+    },
     tabelleSpalten: (id, prozent) => blockAendern(id, tabelleSetzen({ columnsPct: prozent })),
     tabelleBreite: (id, prozent) => blockAendern(id, tabelleSetzen({ widthPct: prozent >= 100 ? undefined : prozent })),
     taste: (e) => taste.current(e),

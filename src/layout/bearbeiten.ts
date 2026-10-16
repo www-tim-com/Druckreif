@@ -60,6 +60,40 @@ export function bildSetzen(teil: Partial<BildLayout>) {
   }
 }
 
+/**
+ * Textumbruch an (Bild schwebt links oder rechts, Text fließt herum) oder aus (Bild wieder als eigene Zeile an
+ * seiner Stelle in der Notiz; Bezugsabsatz und Abstände des Umbruchs fallen weg).
+ */
+export function umfliessenSetzen(an: boolean) {
+  return (e: LayoutEintrag): LayoutEintrag =>
+    an
+      ? bildSetzen({ wrap: true, align: e.image?.align === 'left' ? 'left' : 'right' })(e)
+      : bildSetzen({ wrap: undefined, before: undefined, wrapGapMm: undefined, offsetYMm: undefined })(e)
+}
+
+export const MAX_BILDVERSATZ_MM = 150
+
+/**
+ * Wohin ein umfließendes Bild nach dem Ziehen gehört: vor den Block `zielId`, `versatzMm` unter dessen Anfang.
+ * Nur innerhalb des Abschnitts des Bildes; sonst null. Eine Überschrift zählt als Anfang ihres Abschnitts.
+ */
+export function umflussPosition(bloecke: Block[], bildId: string, zielId: string, versatzMm: number): Partial<BildLayout> | null {
+  const bild = bloecke.findIndex((b) => b.id === bildId)
+  let ziel = bloecke.findIndex((b) => b.id === zielId)
+  if (bild < 0 || ziel < 0) return null
+  const gleich = (i: number) => bloecke[i]?.pfad.join('>') === bloecke[bild].pfad.join('>')
+  if (!gleich(ziel)) return null
+  if (bloecke[ziel].typ === 'heading') {
+    ziel++
+    versatzMm = 0
+    if (!gleich(ziel)) return null
+  }
+  if (ziel === bild) return null
+  const versatz = Math.round(Math.min(MAX_BILDVERSATZ_MM, Math.max(0, versatzMm)))
+  // Direkt vor dem Block, der in der Notiz ohnehin auf das Bild folgt: ursprüngliche Stelle, kein Bezug nötig
+  return { before: ziel === bild + 1 ? undefined : ankerVon(bloecke[ziel]), offsetYMm: versatz || undefined }
+}
+
 /** Tabellenwerte überschreiben; undefined setzt zurück. */
 export function tabelleSetzen(teil: Partial<TabellenLayout>) {
   return (e: LayoutEintrag): LayoutEintrag => {

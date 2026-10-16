@@ -42,6 +42,8 @@ import {
   tabelleSetzen,
   teilenSetzen,
   umbruchSetzen,
+  umfliessenSetzen,
+  MAX_BILDVERSATZ_MM,
 } from '../layout/bearbeiten'
 import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld } from './Band'
 
@@ -344,7 +346,8 @@ function AnsichtReiter(p: BandProps) {
 
 function BildReiter(p: BandProps) {
   const bild = p.block?.eintrag?.image
-  const ausrichtung = bild?.align ?? (bild?.wrap ? 'right' : 'left')
+  const umfliessen = !!bild?.wrap
+  const ausrichtung = bild?.align ?? (umfliessen ? 'right' : 'left')
   const setzen = (teil: Parameters<typeof bildSetzen>[0]) => p.blockAendern(bildSetzen(teil))
   return (
     <>
@@ -357,22 +360,26 @@ function BildReiter(p: BandProps) {
       <Gruppe titel="Ausrichtung">
         <div className="zeile">
           <SymbolKnopf symbol={AlignLeft} text="Links" aktiv={ausrichtung === 'left'} onClick={() => setzen({ align: 'left' })} />
-          <SymbolKnopf symbol={AlignCenter} text="Zentriert" aktiv={ausrichtung === 'center'} onClick={() => setzen({ align: 'center' })} />
+          <SymbolKnopf symbol={AlignCenter} text={umfliessen ? 'Zentriert (nur ohne Textumbruch)' : 'Zentriert'} aktiv={ausrichtung === 'center'} gesperrt={umfliessen} onClick={() => setzen({ align: 'center' })} />
           <SymbolKnopf symbol={AlignRight} text="Rechts" aktiv={ausrichtung === 'right'} onClick={() => setzen({ align: 'right' })} />
         </div>
       </Gruppe>
       <Gruppe titel="Textumbruch">
-        <GrosserKnopf symbol={Image} text="Eigene Zeile" aktiv={!bild?.wrap} onClick={() => setzen({ wrap: undefined })} tipp="Bild steht als eigener Block, Text darunter" />
-        <GrosserKnopf symbol={WrapText} text="Text daneben" aktiv={!!bild?.wrap} onClick={() => setzen({ wrap: true, align: bild?.align === 'left' ? 'left' : 'right' })} tipp="Der folgende Text des Abschnitts fließt neben dem Bild" />
+        <GrosserKnopf symbol={Image} text="Eigene Zeile" aktiv={!umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(false))} tipp="Bild steht als eigener Block an seiner Stelle in der Notiz, Text darunter" />
+        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true))} tipp="Wie in Word: Bild steht links oder rechts, der Text des Abschnitts fließt herum. Bild in den Text ziehen, um es an einen anderen Absatz zu setzen" />
+        <div className="spalte">
+          <Zahlfeld beschriftung="Abstand zum Text" wert={bild?.wrapGapMm} platzhalter="4" start={4} einheit="mm" schritt={1} min={0} max={20} gesperrt={!umfliessen} onWert={(mm) => setzen({ wrapGapMm: mm })} />
+          <KleinerKnopf symbol={Undo2} text="An ursprüngliche Stelle" gesperrt={!bild?.before && !bild?.offsetYMm} onClick={() => setzen({ before: undefined, offsetYMm: undefined })} />
+        </div>
       </Gruppe>
       <Gruppe titel="Position">
         <div className="spalte">
-          <Zahlfeld beschriftung="Abstand oben" wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={-30} max={150} onWert={(mm) => setzen({ offsetYMm: mm })} />
+          <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : -30} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
           <span className="band-info" title="Bild auf der Seite ziehen verschiebt es, die Ecken ändern die Größe">Ziehen: verschieben · Ecke: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Zurücksetzen">
-        <GrosserKnopf symbol={RotateCcw} text="Bild zurücksetzen" gesperrt={!bild} onClick={() => setzen({ widthMm: undefined, align: undefined, wrap: undefined, offsetYMm: undefined })} />
+        <GrosserKnopf symbol={RotateCcw} text="Bild zurücksetzen" gesperrt={!bild} onClick={() => p.blockAendern((e) => ({ ...e, image: undefined }))} />
       </Gruppe>
     </>
   )
