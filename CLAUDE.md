@@ -27,10 +27,25 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
 
 ## Stolperfallen
 
-- Paged.js versteht kein `:is()`/`:where()` in CSS → Selektoren ausschreiben.
+- Paged.js versteht kein `:is()`/`:where()` in CSS → Selektoren ausschreiben. Es verwirft außerdem `@media` außer
+  `print` und schreibt Selektoren mit `+`/`nth-of-type` mit geringerer Spezifität und Zufallsnamen um. Deshalb gehen
+  Schriften, `obsidian-basis.css` und Vault-CSS (Theme, Snippets) an Paged.js vorbei (`data-pagedjs-ignore`, der Browser
+  wendet sie an); nur `@page`, Umbruch- und Zählerangaben aus dem Vault-CSS bekommt Paged.js (`stil/aufteilen.ts`).
+  `druck.css` läuft durch Paged.js: dort keine Selektoren mit `+` oder `nth-of-type` (Notizbeginn: Klasse `folgend`).
+- DOM wie Obsidians PDF-Export: `div.print.markdown-reading-view` > `article.notiz.markdown-preview-view.markdown-rendered`
+  (+ `cssclasses` aus dem Frontmatter). Obsidian-Variablen (`--h2-color`, `--bold-color` …) liest `obsidian-basis.css`
+  mit Ersatzwert.
+- Paged.js 0.4 hält Elemente mit `style`-Attribut für unsichtbar (Umbrüche dahinter fielen weg) → Korrektur-Handler
+  `PAGED_KORREKTUR` in `Vorschau.tsx`.
+- Teil-Umbruch (`Vorschau.tsx`): Gruppen = Notiz mit neuer Seite + direkt anschließende. Unveränderte Gruppen (gleiches
+  HTML, gleiches CSS) übernehmen ihre Seiten aus der sichtbaren Fassung (unberührte Kopie vor Auswahl/Markierungen),
+  nur geänderte bricht Paged.js um; danach neu nummerieren. Passt etwas nicht, wird alles umbrochen. Hängt Paged.js-CSS
+  von der Lage im Dokument ab (Zähler, linke/rechte Seiten), immer alles umbrechen (`NICHT_TEILBAR`).
+- Layout-Änderungen bauen sofort mit dem neuen Layout auf (`ausstehend` in `App.tsx`), nicht erst nach dem Speichern.
 - Paged.js löst `url()` gegen `about:srcdoc` auf → `urlsAbsolut()` in `Vorschau.tsx`.
 - Paged.js verwirft `@media screen` aus verarbeiteten Stylesheets → `vorschau.css` wird erst nach dem Umbruch eingefügt.
-- Vites `import.meta.glob` übersieht Ordner mit Punkt → Dateien aus `demo/vault/.obsidian/` in `demoVault.ts` einzeln importieren.
+- Vites `import.meta.glob` übersieht Ordner mit Punkt → Dateien aus `demo/vault/.obsidian/` in `demoVault.ts` einzeln importieren
+  (CSS mit `?raw`: über `?url` liefert der Entwicklungsserver ein JS-Modul).
 - Jede Änderung baut das Dokument neu und bricht es in einem zweiten iframe um; erst dann wird umgeschaltet
   (kein Flackern). Block-IDs (`n0-12`) sind nur innerhalb einer Fassung gültig, Layout hängt am Fingerabdruck.
 - Ausblenden darf nie Inhalt stillschweigend entfernen: jeder ausgeblendete Block erzeugt einen Hinweis mit „Einblenden“.

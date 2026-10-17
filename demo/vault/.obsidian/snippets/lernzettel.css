@@ -7,3 +7,15 @@
 .markdown-rendered h3 {
   color: var(--color-accent);
 }
+
+/* Notizen mit „cssclasses: merkzettel“ im Frontmatter: Fettes in Akzentfarbe */
+.markdown-preview-view.merkzettel :is(strong, b) {
+  --bold-color: var(--color-accent);
+}
+
+/* Nur im Druck, wie bei Obsidians PDF-Export */
+@media print {
+  .markdown-rendered blockquote {
+    --blockquote-background-color: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.06);
+  }
+}

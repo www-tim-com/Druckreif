@@ -7,13 +7,14 @@ import type { Vault } from './vault'
 // deshalb werden diese Dateien einzeln importiert – neue Dateien dort hier ergänzen.
 import appJson from '/demo/vault/.obsidian/app.json?url'
 import appearanceJson from '/demo/vault/.obsidian/appearance.json?url'
-import snippetLernzettel from '/demo/vault/.obsidian/snippets/lernzettel.css?url'
+// CSS als Text: über ?url liefert Vites Entwicklungsserver ein JS-Modul statt des Stylesheets
+import snippetLernzettel from '/demo/vault/.obsidian/snippets/lernzettel.css?raw'
 
 const urls: Record<string, string> = {
   ...(import.meta.glob('/demo/vault/**/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>),
   '/demo/vault/.obsidian/app.json': appJson,
   '/demo/vault/.obsidian/appearance.json': appearanceJson,
-  '/demo/vault/.obsidian/snippets/lernzettel.css': snippetLernzettel,
+  '/demo/vault/.obsidian/snippets/lernzettel.css': URL.createObjectURL(new Blob([snippetLernzettel], { type: 'text/css' })),
 }
 
 const PRAEFIX = '/demo/vault/'

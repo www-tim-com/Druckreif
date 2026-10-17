@@ -19,6 +19,8 @@ export async function diagrammeZeichnen(container: HTMLElement, fehler: (text: s
         fertig.set(quelle, svg)
       }
       el.innerHTML = svg
+      // Stil im SVG lassen: Paged.js zöge ihn sonst in den <head>, übernommene Seiten (Teil-Umbruch) verlören ihn
+      el.querySelectorAll('style').forEach((stil) => stil.setAttribute('data-pagedjs-ignore', ''))
     } catch (e) {
       // Nie Rohcode drucken und nie stillschweigend weglassen
       el.innerHTML = '<div class="mermaid-fehler">Diagramm konnte nicht gezeichnet werden</div>'
