@@ -2,10 +2,11 @@
 
 import type { Hinweis } from '../hinweise'
 import type { Vault } from '../vault/vault'
+import { cssAufteilen, type VaultCss } from './aufteilen'
 
 export interface VaultEinstellungen {
   /** CSS aus dem Vault in Reihenfolge: Theme, Snippets, Akzentfarbe */
-  css: string[]
+  css: VaultCss[]
   theme: string | null
   snippets: string[]
   strictLineBreaks: boolean
@@ -30,26 +31,26 @@ export async function vaultEinstellungenLaden(vault: Vault): Promise<{ einstellu
   const hinweise: Hinweis[] = []
   const app = await jsonLesen(vault, '.obsidian/app.json', hinweise)
   const aussehen = await jsonLesen(vault, '.obsidian/appearance.json', hinweise)
-  const css: string[] = []
+  const css: VaultCss[] = []
 
   const theme = typeof aussehen.cssTheme === 'string' && aussehen.cssTheme ? aussehen.cssTheme : null
   if (theme) {
     // neue Ablage: themes/<Name>/theme.css, alte: themes/<Name>.css
     const pfad = [`.obsidian/themes/${theme}/theme.css`, `.obsidian/themes/${theme}.css`].find((p) => vault.dateien.includes(p))
-    if (pfad) css.push(await vault.lesenText(pfad))
+    if (pfad) css.push(cssAufteilen(await vault.lesenText(pfad), `Theme „${theme}“`, hinweise))
     else hinweise.push({ stufe: 'gelb', notiz: '', text: `Theme „${theme}“ nicht gefunden, Standard-Theme verwendet` })
   }
 
   const snippets = Array.isArray(aussehen.enabledCssSnippets) ? (aussehen.enabledCssSnippets as string[]) : []
   for (const name of snippets) {
     const pfad = `.obsidian/snippets/${name}.css`
-    if (vault.dateien.includes(pfad)) css.push(await vault.lesenText(pfad))
+    if (vault.dateien.includes(pfad)) css.push(cssAufteilen(await vault.lesenText(pfad), `CSS-Snippet „${name}“`, hinweise))
     else hinweise.push({ stufe: 'gelb', notiz: '', text: `CSS-Snippet „${name}“ nicht gefunden` })
   }
 
   if (typeof aussehen.accentColor === 'string' && aussehen.accentColor) {
     const hsl = hexZuHsl(aussehen.accentColor)
-    if (hsl) css.push(`body { --accent-h: ${hsl[0]}; --accent-s: ${hsl[1]}%; --accent-l: ${hsl[2]}%; }`)
+    if (hsl) css.push({ nativ: `body { --accent-h: ${hsl[0]}; --accent-s: ${hsl[1]}%; --accent-l: ${hsl[2]}%; }`, umbruch: '' })
   }
 
   return {

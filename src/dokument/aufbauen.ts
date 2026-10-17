@@ -44,12 +44,14 @@ export function stempel(vault: Vault, pfad: string): Promise<number> {
 /**
  * Baut ein Dokument aus den Einträgen einer Mappe. Jede Notiz beginnt auf einer neuen Seite, außer der
  * Eintrag sagt newPage: false. Eine Reihenfolgedatei wird durch die Notizen ersetzt, die sie aufzählt.
+ * `ausstehend`: Layouts, deren Datei gerade geschrieben wird – die gelten statt der Datei (nicht aufs Speichern warten).
  */
 export async function dokumentAufbauen(
   vault: Vault,
   eintraege: MappenEintrag[],
   einstellungen: VaultEinstellungen,
   titel: string,
+  ausstehend?: Map<string, LayoutDatei>,
 ): Promise<Dokument> {
   const hinweise: Hinweis[] = []
   const quellen = new Map<string, number>()
@@ -79,7 +81,8 @@ export async function dokumentAufbauen(
   const container = document.createElement('div')
   const notizen: NotizTeil[] = []
   for (const [i, t] of teile.entries()) {
-    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise, quellen)
+    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise, quellen, ausstehend)
+    if (i > 0) teil.article.classList.add('folgend')
     container.append(teil.article)
     notizen.push(teil.notiz)
   }
@@ -112,17 +115,18 @@ async function notizAufbauen(
   einstellungen: VaultEinstellungen,
   hinweise: Hinweis[],
   quellen: Map<string, number>,
+  ausstehend?: Map<string, LayoutDatei>,
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
   const name = notizName(pfad)
   if (!quellen.has(pfad)) quellen.set(pfad, await stempel(vault, pfad))
-  const text = frontmatterLesen(await vault.lesenText(pfad)).rest
+  const { daten, rest: text } = frontmatterLesen(await vault.lesenText(pfad))
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
   // Layout zuerst: es sagt, welche eingebetteten Notizen eingefügt werden
   let layout: LayoutDatei
   let layoutFehler: string | null = null
   try {
-    layout = await layoutLaden(vault, pfad, name)
+    layout = ausstehend?.get(pfad) ?? (await layoutLaden(vault, pfad, name))
   } catch (fehler) {
     layoutFehler = (fehler as Error).message
     layout = leeresLayout(pfad, name)
@@ -158,8 +162,9 @@ async function notizAufbauen(
     praefix,
   )
 
+  // Klassen wie in Obsidians Leseansicht, damit Theme und Snippets greifen – samt cssclasses aus dem Frontmatter
   const article = document.createElement('article')
-  article.className = 'notiz'
+  article.className = ['notiz', 'markdown-preview-view', 'markdown-rendered', ...cssKlassen(daten)].join(' ')
   article.dataset.notiz = pfad
   article.innerHTML = html
   einbettungenEinsetzen(article, einbettungen)
@@ -251,6 +256,12 @@ async function einbettungAufbauen(
   }
   const bildUrls = await bilderLaden(vault, text, treffer, einstellungen, quellen)
   return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks, id)
+}
+
+/** `cssclasses` (bzw. älter `cssclass`) aus dem Frontmatter: Liste oder durch Leerzeichen/Komma getrennt */
+function cssKlassen(daten: Record<string, string | string[]>): string[] {
+  const werte = [daten.cssclasses, daten.cssclass].flat().filter((w): w is string => typeof w === 'string')
+  return werte.flatMap((w) => w.split(/[\s,]+/)).filter((k) => /^-?[_a-zA-Z][\w-]*$/.test(k))
 }
 
 /** Dateiname einer Notiz aus einem Wikilink: „.md“ darf fehlen. */

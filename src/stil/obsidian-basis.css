@@ -2,6 +2,8 @@
  * Nachbau der Obsidian-Standardvariablen und Leseansicht (helle Variante).
  * Themes und Snippets aus dem Vault überschreiben diese Werte, so wie in Obsidian.
  * Größen in em, damit sie sich auf die Grundschrift (10,5 pt) beziehen.
+ * Obsidians Gestaltungs-Variablen (--h2-color, --bold-color …) werden mit Ersatzwert gelesen: setzt ein Snippet sie,
+ * wirken sie wie in Obsidian; sonst bleibt alles wie hier.
  */
 
 body {
@@ -90,12 +92,22 @@ body {
   margin: var(--heading-spacing) 0 0.5em;
   line-height: 1.2;
 }
-.markdown-rendered h1 { font-size: var(--h1-size); font-weight: var(--h1-weight); }
-.markdown-rendered h2 { font-size: var(--h2-size); font-weight: var(--h2-weight); }
-.markdown-rendered h3 { font-size: var(--h3-size); font-weight: var(--h3-weight); }
-.markdown-rendered h4 { font-size: var(--h4-size); font-weight: var(--h4-weight); }
-.markdown-rendered h5 { font-size: var(--h5-size); font-weight: var(--h5-weight); }
-.markdown-rendered h6 { font-size: var(--h6-size); font-weight: var(--h6-weight); color: var(--text-muted); }
+.markdown-rendered strong {
+  font-weight: var(--bold-weight, bold);
+  color: var(--bold-color, currentColor);
+}
+.markdown-rendered em {
+  color: var(--italic-color, currentColor);
+}
+.markdown-rendered li::marker {
+  color: var(--list-marker-color, currentColor);
+}
+.markdown-rendered h1 { font-size: var(--h1-size); font-weight: var(--h1-weight); color: var(--h1-color, currentColor); font-family: var(--h1-font, inherit); font-style: var(--h1-style, normal); font-variant: var(--h1-variant, normal); }
+.markdown-rendered h2 { font-size: var(--h2-size); font-weight: var(--h2-weight); color: var(--h2-color, currentColor); font-family: var(--h2-font, inherit); font-style: var(--h2-style, normal); font-variant: var(--h2-variant, normal); }
+.markdown-rendered h3 { font-size: var(--h3-size); font-weight: var(--h3-weight); color: var(--h3-color, currentColor); font-family: var(--h3-font, inherit); font-style: var(--h3-style, normal); font-variant: var(--h3-variant, normal); }
+.markdown-rendered h4 { font-size: var(--h4-size); font-weight: var(--h4-weight); color: var(--h4-color, currentColor); font-family: var(--h4-font, inherit); font-style: var(--h4-style, normal); font-variant: var(--h4-variant, normal); }
+.markdown-rendered h5 { font-size: var(--h5-size); font-weight: var(--h5-weight); color: var(--h5-color, currentColor); font-family: var(--h5-font, inherit); font-style: var(--h5-style, normal); font-variant: var(--h5-variant, normal); }
+.markdown-rendered h6 { font-size: var(--h6-size); font-weight: var(--h6-weight); color: var(--h6-color, var(--text-muted)); font-family: var(--h6-font, inherit); font-style: var(--h6-style, normal); font-variant: var(--h6-variant, normal); }
 
 .markdown-rendered p,
 .markdown-rendered ul,
@@ -122,8 +134,8 @@ body {
   vertical-align: middle;
 }
 .markdown-rendered .task-list-item.is-checked {
-  color: var(--text-muted);
-  text-decoration: line-through;
+  color: var(--checklist-done-color, var(--text-muted));
+  text-decoration: var(--checklist-done-decoration, line-through);
 }
 
 .markdown-rendered mark {
@@ -132,8 +144,8 @@ body {
 }
 
 .markdown-rendered a {
-  color: var(--text-accent);
-  text-decoration: underline;
+  color: var(--link-color, var(--text-accent));
+  text-decoration: var(--link-decoration, underline);
 }
 .markdown-rendered a.tag {
   background-color: var(--tag-background);
@@ -149,7 +161,7 @@ body {
 }
 .markdown-rendered th,
 .markdown-rendered td {
-  border: 1px solid var(--table-border-color);
+  border: var(--table-border-width, 1px) solid var(--table-border-color);
   padding: 0.25em 0.5em;
   text-align: start;
   vertical-align: top;
@@ -157,6 +169,7 @@ body {
 .markdown-rendered th {
   font-weight: var(--table-header-weight);
   background: var(--table-header-background);
+  color: var(--table-header-color, currentColor);
 }
 
 .markdown-rendered code {
@@ -179,7 +192,10 @@ body {
 }
 
 .markdown-rendered blockquote {
-  border-inline-start: 2px solid var(--color-accent);
+  border-inline-start: var(--blockquote-border-thickness, 2px) solid var(--blockquote-border-color, var(--color-accent));
+  color: var(--blockquote-color, currentColor);
+  background-color: var(--blockquote-background-color, transparent);
+  font-style: var(--blockquote-font-style, normal);
   margin-inline: 0;
   padding-inline-start: 1.5em;
 }
@@ -193,7 +209,7 @@ body {
   overflow: hidden;
 }
 .callout-title {
-  color: rgb(var(--callout-color));
+  color: var(--callout-title-color, rgb(var(--callout-color)));
   font-weight: var(--callout-title-weight);
   display: flex;
   gap: 0.4em;

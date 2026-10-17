@@ -1,6 +1,7 @@
 ---
 lernfeld: 3
 status: in Arbeit
+cssclasses: merkzettel
 ---
 # Asthma bronchiale
 

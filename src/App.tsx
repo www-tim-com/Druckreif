@@ -307,7 +307,7 @@ export function App() {
     setBaut(true)
     const timer = setTimeout(() => {
       versuchen(async () => {
-        const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name)
+        const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current)
         if (abgebrochen) return
         for (const n of dok.notizen) {
           if (n.layoutKaputt) kaputteLayouts.current.add(n.pfad)
@@ -320,7 +320,7 @@ export function App() {
           setLayoutStand((s) => s + 1)
         }
       })
-    }, 120)
+    }, 50)
     return () => {
       abgebrochen = true
       clearTimeout(timer)
@@ -381,15 +381,22 @@ export function App() {
   /** Notizen mit beschädigter Layout-Datei – auch aus anderen Mappen (Rückgängig kann sie sonst überschreiben) */
   const kaputteLayouts = useRef(new Set<string>())
 
+  /** Layouts, deren Datei gerade geschrieben wird: der Neuaufbau beginnt sofort damit, statt aufs Speichern zu warten */
+  const ausstehend = useRef(new Map<string, LayoutDatei>())
+
   async function layoutSchreiben(layout: LayoutDatei) {
     if (!geladen) return
     layouts.current.set(layout.note, layout)
     setLayoutStand((s) => s + 1)
     speichertRef.current++
     setSpeichert(speichertRef.current)
+    ausstehend.current.set(layout.note, layout)
+    setStand((s) => s + 1)
     try {
       await layoutSpeichern(geladen.vault, layout)
     } finally {
+      // erneut aufbauen, jetzt aus der Datei (ergibt dasselbe HTML, also keinen neuen Umbruch – außer das Speichern schlug fehl)
+      if (ausstehend.current.get(layout.note) === layout) ausstehend.current.delete(layout.note)
       speichertRef.current--
       setSpeichert(speichertRef.current)
       setStand((s) => s + 1)

@@ -44,18 +44,19 @@ body,
   font-family: var(--druck-schrift-mono);
 }
 
-/* Jede Notiz beginnt auf einer neuen Seite */
-.notiz + .notiz {
+/* Jede Notiz beginnt auf einer neuen Seite. Klasse statt „.notiz + .notiz“: Paged.js schreibt Selektoren mit „+“
+   in Attribute mit Zufallsnamen um – wiederverwendete Seiten einer früheren Fassung (Vorschau.tsx) passten dann nicht mehr. */
+.notiz.folgend {
   break-before: page;
 }
 .notiz > h1:first-child {
   margin-top: 0;
 }
 /* Mappe: Notiz schließt direkt an die vorige an */
-.notiz + .notiz.anschliessen {
+.notiz.folgend.anschliessen {
   break-before: auto;
 }
-.notiz + .notiz.anschliessen > h1:first-child {
+.notiz.folgend.anschliessen > h1:first-child {
   margin-top: 1.5em;
 }
 
