@@ -82,6 +82,10 @@ export interface LayoutDatei {
 
 export const LAYOUT_ORDNER = '.lernzettel'
 
+/** Grundschrift und Zeilenabstand ohne Layout-Datei – gleiche Werte wie --druck-groesse/--druck-zeilenabstand in druck.css */
+export const STANDARD_SCHRIFT_PT = 10.5
+export const STANDARD_ZEILENABSTAND = 1.35
+
 export function layoutPfad(notizPfad: string): string {
   return `${LAYOUT_ORDNER}/${notizPfad.replace(/\.md$/i, '').replace(/\//g, '__')}.layout.json`
 }
@@ -93,13 +97,34 @@ export function leeresLayout(notizPfad: string, titel: string): LayoutDatei {
 export async function layoutLaden(vault: Vault, notizPfad: string, titel: string): Promise<LayoutDatei> {
   const pfad = layoutPfad(notizPfad)
   if (!vault.dateien.includes(pfad)) return leeresLayout(notizPfad, titel)
+  // Kaputte Datei nicht überschreiben – Nutzer soll sie sich ansehen können (aufbauen.ts sperrt die Notiz)
+  let daten: unknown
   try {
-    const daten = JSON.parse(await vault.lesenText(pfad)) as LayoutDatei
-    return { ...leeresLayout(notizPfad, titel), ...daten }
+    daten = JSON.parse(await vault.lesenText(pfad))
   } catch {
-    // Kaputte Datei nicht überschreiben – Nutzer soll sie sich ansehen können
     throw new Error(`Layout-Datei ${pfad} ist kein gültiges JSON`)
   }
+  const fehler = strukturFehler(daten)
+  if (fehler) throw new Error(`Layout-Datei ${pfad} ist ungültig (${fehler})`)
+  // Gespeichert wird immer unter der geladenen Notiz: ein kopiertes oder veraltetes „note“ darf nicht
+  // in die Layout-Datei einer anderen Notiz schreiben
+  return { ...leeresLayout(notizPfad, titel), ...(daten as LayoutDatei), note: notizPfad }
+}
+
+function strukturFehler(daten: unknown): string | null {
+  const objekt = (w: unknown) => typeof w === 'object' && w !== null && !Array.isArray(w)
+  if (!objekt(daten)) return 'kein Objekt'
+  const d = daten as Record<string, unknown>
+  if (d.settings !== undefined && !objekt(d.settings)) return '„settings“ ist kein Objekt'
+  if (d.items === undefined) return null
+  if (!Array.isArray(d.items)) return '„items“ ist keine Liste'
+  for (const [i, e] of d.items.entries()) {
+    const anker = objekt(e) ? (e as { anchor?: unknown }).anchor : undefined
+    if (!objekt(anker) || !Array.isArray((anker as Anker).path) || typeof (anker as Anker).type !== 'string') {
+      return `Eintrag ${i + 1} ohne gültigen „anchor“`
+    }
+  }
+  return null
 }
 
 export async function layoutSpeichern(vault: Vault, layout: LayoutDatei): Promise<void> {

@@ -69,7 +69,9 @@ export function Zahlfeld({ beschriftung, wert, platzhalter, start, einheit, schr
   const [text, setText] = useState(format(wert))
   useEffect(() => setText(format(wert)), [wert])
 
-  const begrenzen = (z: number) => Math.round(Math.min(max, Math.max(min, z)) * 10) / 10
+  // auf so viele Nachkommastellen runden, wie der Schritt hat (mindestens eine): 1,35 bleibt bei Schritt 0,05 erhalten
+  const faktor = 10 ** Math.max(1, (String(schritt).split('.')[1] ?? '').length)
+  const begrenzen = (z: number) => Math.round(Math.min(max, Math.max(min, z)) * faktor) / faktor
   function uebernehmen() {
     const t = text.trim().replace(',', '.')
     const z = Number(t)
@@ -108,5 +110,14 @@ export function Zahlfeld({ beschriftung, wert, platzhalter, start, einheit, schr
 }
 
 function format(z: number | undefined): string {
-  return z === undefined ? '' : String(z).replace('.', ',')
+  return z === undefined ? '' : zahlText(z)
 }
+
+/** Zahl mit deutschem Komma, z. B. 10,5 */
+export function zahlText(z: number): string {
+  return String(z).replace('.', ',')
+}
+
+/** Grenzen für den Zoom (1 = 100 %) – Menüband, Statusleiste und App */
+export const ZOOM_MIN = 0.3
+export const ZOOM_MAX = 3

@@ -9,17 +9,17 @@
 import type { Block } from '../dokument/bloecke'
 import type { Hinweis } from '../hinweise'
 import { pruefsumme } from '../dokument/bloecke'
-import type { Anker, LayoutDatei, LayoutEintrag } from './layoutDatei'
+import type { Anker, BlockTyp, LayoutDatei, LayoutEintrag } from './layoutDatei'
 
 const MAX_WOERTER = 64
 
 export function ankerVon(block: Block): Anker {
   return block.typ === 'image'
-    ? { path: block.pfad, type: 'image', image: block.bild }
+    ? { path: block.pfad, type: 'image', image: block.bild, index: block.index }
     : { path: block.pfad, type: block.typ, index: block.index, hash: block.hash, words: wortPruefsummen(block.text) }
 }
 
-export function wortPruefsummen(text: string): string {
+function wortPruefsummen(text: string): string {
   return text
     .toLowerCase()
     .split(' ')
@@ -33,9 +33,18 @@ export function wortPruefsummen(text: string): string {
 export function blockFinden(anker: Anker, bloecke: Block[]): { block: Block; sicher: boolean } | null {
   if (anker.type === 'image') {
     const gleicheBilder = bloecke.filter((b) => b.typ === 'image' && b.bild === anker.image)
-    const imPfad = gleicheBilder.find((b) => gleicherPfad(b.pfad, anker.path))
-    if (imPfad) return { block: imPfad, sicher: true }
+    const imPfad = gleicheBilder.filter((b) => gleicherPfad(b.pfad, anker.path))
+    // Dasselbe Bild mehrmals im Abschnitt: die Position (index) unterscheidet die Kopien. Ältere Anker ohne index
+    // meinen die erste Kopie.
+    const genau = imPfad.find((b) => b.index === anker.index) ?? (anker.index === undefined || imPfad.length === 1 ? imPfad[0] : undefined)
+    if (genau) return { block: genau, sicher: true }
+    if (imPfad.length > 0) return { block: imPfad[0], sicher: false }
     return gleicheBilder.length === 1 ? { block: gleicheBilder[0], sicher: false } : null
+  }
+  // Fußnoten gibt es einmal pro Notiz; ältere Anker tragen noch den Pfad des letzten Abschnitts
+  if (anker.type === 'footnotes') {
+    const fussnoten = bloecke.find((b) => b.typ === 'footnotes')
+    return fussnoten ? { block: fussnoten, sicher: true } : null
   }
   const kandidaten = bloecke.filter((b) => b.typ === anker.type && gleicherPfad(b.pfad, anker.path))
   const exakt = kandidaten.find((b) => b.hash === anker.hash && b.index === anker.index)
@@ -58,7 +67,7 @@ function gleicherPfad(a: string[], b: string[]): boolean {
 }
 
 /** Anteil gemeinsamer Wörter (Dice-Koeffizient) zweier Wort-Prüfsummen-Ketten. */
-export function aehnlichkeit(a: string, b: string): number {
+function aehnlichkeit(a: string, b: string): number {
   const wa = a.match(/.{4}/g) ?? []
   const wb = b.match(/.{4}/g) ?? []
   if (wa.length === 0 || wb.length === 0) return 0
@@ -75,15 +84,10 @@ export function aehnlichkeit(a: string, b: string): number {
   return (2 * gemeinsam) / (wa.length + wb.length)
 }
 
-export interface Angewendet {
-  hinweise: Hinweis[]
-  /** Block-ID -> Index des zugeordneten Layout-Eintrags */
-  zuordnung: Map<string, number>
-}
-
-/** Wendet das Layout im DOM an und liefert Hinweise und die Zuordnung Block -> Eintrag. */
-export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke: Block[], notizPfad: string): Angewendet {
+/** Wendet das Layout im DOM an und liefert die Hinweise dazu. */
+export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke: Block[], notizPfad: string): Hinweis[] {
   const hinweise: Hinweis[] = []
+  // Block-ID -> Index des zugeordneten Eintrags: ein zweiter Eintrag für denselben Block wird rot gemeldet
   const zuordnung = new Map<string, number>()
   const ausblenden: HTMLElement[] = []
   if (layout.settings.fontSizePt) wurzel.style.fontSize = `${layout.settings.fontSizePt}pt`
@@ -120,7 +124,7 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
   })
   // Erst am Ende entfernen, damit verschachtelte Blöcke vorher noch gefunden werden
   for (const el of ausblenden) el.remove()
-  return { hinweise, zuordnung }
+  return hinweise
 }
 
 /**
@@ -154,10 +158,10 @@ function umflussAbstand(bild: HTMLElement, mm: number) {
 /** Bei einer Überschrift am Anfang ihres Abschnitts gilt eine Änderung für den ganzen Abschnitt. */
 function abschnittOderBlock(el: HTMLElement): HTMLElement {
   const section = el.parentElement
-  return /^H[2-4]$/.test(el.tagName) && section?.tagName === 'SECTION' && section.firstElementChild === el ? section : el
+  return /^H[2-6]$/.test(el.tagName) && section?.tagName === 'SECTION' && section.firstElementChild === el ? section : el
 }
 
-const TYP_NAMEN: Record<string, string> = {
+const TYP_NAMEN: Record<BlockTyp, string> = {
   heading: 'Überschrift',
   paragraph: 'Absatz',
   list: 'Liste',
@@ -171,7 +175,7 @@ const TYP_NAMEN: Record<string, string> = {
   other: 'Block',
 }
 
-export function typName(typ: string): string {
+export function typName(typ: BlockTyp): string {
   return TYP_NAMEN[typ] ?? typ
 }
 

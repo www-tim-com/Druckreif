@@ -1,6 +1,7 @@
 // Statusleiste unten wie in Word: Seite x von y, Hinweise, Zoom-Regler.
 
 import { Minus, Plus, TriangleAlert } from 'lucide-react'
+import { ZOOM_MAX, ZOOM_MIN } from './Band'
 
 interface Props {
   seite: number
@@ -28,8 +29,8 @@ export function Statusleiste({ seite, seiten, notizen, probleme, meldung, onHinw
       </button>
       <input
         type="range"
-        min={30}
-        max={300}
+        min={ZOOM_MIN * 100}
+        max={ZOOM_MAX * 100}
         step={10}
         value={Math.round(zoom * 100)}
         onChange={(e) => onZoom(Number(e.target.value) / 100)}

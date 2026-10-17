@@ -11,7 +11,7 @@ const SCHWELLE = 0.4
  * teilen = Abschnitt/Block darf über Seiten laufen, tabelle = Tabelle über Seiten teilen,
  * bild = Bild auswählen (verkleinern kann nur der Nutzer), null = nichts Passendes
  */
-export type LeerraumArt = 'umbruch' | 'notiz' | 'teilen' | 'tabelle' | 'bild' | null
+type LeerraumArt = 'umbruch' | 'notiz' | 'teilen' | 'tabelle' | 'bild' | null
 
 export interface Leerraum {
   seite: number
@@ -26,7 +26,7 @@ export interface Leerraum {
   was: string
 }
 
-export const LEERRAUM_KNOPF: Record<Exclude<LeerraumArt, null>, string> = {
+const LEERRAUM_KNOPF: Record<Exclude<LeerraumArt, null>, string> = {
   umbruch: 'Umbruch entfernen',
   notiz: 'Notiz direkt anschließen',
   teilen: 'Teilen erlauben',
@@ -34,8 +34,14 @@ export const LEERRAUM_KNOPF: Record<Exclude<LeerraumArt, null>, string> = {
   bild: 'Bild auswählen',
 }
 
-export function leerraumText(l: Leerraum): string {
-  return `Seite ${l.seite} zu ${Math.round(l.anteil * 100)} % leer – ${l.was} beginnt auf der nächsten Seite`
+export function leerraumText(l: Leerraum, mitSeite = true): string {
+  const leer = `${Math.round(l.anteil * 100)} % leer – ${l.was} beginnt auf der nächsten Seite`
+  return mitSeite ? `Seite ${l.seite} zu ${leer}` : leer
+}
+
+/** Beschriftung des Knopfs zum Beheben, oder null, wenn es nichts Passendes gibt */
+export function leerraumKnopf(l: Leerraum): string | null {
+  return l.art && l.block ? LEERRAUM_KNOPF[l.art] : null
 }
 
 /** Sucht halb leere Seiten und markiert sie auf dem Bildschirm. */
@@ -91,7 +97,9 @@ function ursacheFinden(erster: HTMLElement): Omit<Leerraum, 'seite' | 'anteil'> 
   // Äußerste Einheit, die am Stück bleiben soll
   const amStueck = [...kette].reverse().find((el) => el.tagName !== 'ARTICLE' && fenster.getComputedStyle(el).breakInside.startsWith('avoid'))
   if (!amStueck) return { notiz, block: null, art: null, was: beschreiben(erster) }
-  const art = amStueck.tagName === 'TABLE' ? 'tabelle' : amStueck.tagName === 'FIGURE' ? 'bild' : 'teilen'
+  // „Teilen erlauben“ nur, wo druck.css eine .teilbar-Regel hat (Abschnitte, Listen, Callouts, Code)
+  const teilbar = amStueck.matches('section, ul, ol, .callout, pre')
+  const art = amStueck.tagName === 'TABLE' ? 'tabelle' : amStueck.tagName === 'FIGURE' ? 'bild' : teilbar ? 'teilen' : null
   return { notiz, block: blockVon(amStueck), art, was: beschreiben(amStueck) }
 }
 
@@ -101,10 +109,13 @@ function blockVon(el: HTMLElement): string | null {
 }
 
 function beschreiben(el: HTMLElement): string {
-  const ueberschrift = el.tagName === 'SECTION' ? el.querySelector(':scope > h2, :scope > h3, :scope > h4') : /^H[1-6]$/.test(el.tagName) ? el : null
+  const ueberschrift = el.tagName === 'SECTION' && /^H[2-6]$/.test(el.firstElementChild?.tagName ?? '') ? el.firstElementChild : /^H[1-6]$/.test(el.tagName) ? el : null
   if (ueberschrift) return `Abschnitt „${ueberschrift.textContent?.trim()}“`
   const namen: Record<string, string> = { TABLE: 'Tabelle', FIGURE: 'Bild', UL: 'Liste', OL: 'Liste', PRE: 'Codeblock', P: 'Absatz' }
-  return el.classList.contains('callout') ? 'Callout' : (namen[el.tagName] ?? 'Block')
+  if (el.classList.contains('callout')) return 'Callout'
+  if (el.classList.contains('mermaid-diagramm')) return 'Diagramm'
+  if (el.classList.contains('katex-display') || el.querySelector('.katex-display')) return 'Formel'
+  return namen[el.tagName] ?? 'Block'
 }
 
 /** Schraffierte Fläche über dem leeren Teil der Seite, mit Knopf. Nur Bildschirm (vorschau.css). */
@@ -121,13 +132,14 @@ function markieren(seite: HTMLElement, flaeche: DOMRect, unten: number, l: Leerr
     width: prozent(flaeche.width, rand.width),
   })
   const text = dok.createElement('span')
-  text.textContent = `${Math.round(l.anteil * 100)} % leer – ${l.was} beginnt auf der nächsten Seite`
+  text.textContent = leerraumText(l, false)
   marke.append(text)
-  if (l.art && l.block) {
+  const beschriftung = leerraumKnopf(l)
+  if (beschriftung) {
     const knopf = dok.createElement('button')
     knopf.type = 'button'
     knopf.dataset.leerraum = String(index)
-    knopf.textContent = LEERRAUM_KNOPF[l.art]
+    knopf.textContent = beschriftung
     marke.append(knopf)
   }
   seite.append(marke)

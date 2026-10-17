@@ -4,6 +4,7 @@
 import type { MarkdownIt, StateCore, StateInline, Token } from 'markdown-it'
 import { BILD_ENDUNGEN, endung } from '../vault/vault'
 import type { UmwandelKontext } from './umwandeln'
+import { TAG_NAME } from './vorbereiten'
 
 /** Codeblöcke von Plugins, die in der PDF nicht erscheinen */
 const PLUGIN_BLOECKE = ['dataview', 'dataviewjs', 'query', 'tasks', 'excalidraw', 'chart', 'kanban']
@@ -77,7 +78,11 @@ function wikilink(state: StateInline, silent: boolean): boolean {
   const anfang = start + (einbettung ? 3 : 2)
   const ende = state.src.indexOf(']]', anfang)
   if (ende < 0) return false
-  if (silent) return true
+  if (silent) {
+    // markdown-it verlangt auch hier, dass die Regel state.pos weiterschiebt (z. B. in [Text [[Link]]](url))
+    state.pos = ende + 2
+    return true
+  }
 
   // in Tabellen schreibt Obsidian \| statt |
   const inhalt = state.src.slice(anfang, ende).replace(/\\\|/g, '|')
@@ -112,11 +117,13 @@ function wikilink(state: StateInline, silent: boolean): boolean {
 
 // ---- #tags mitten im Satz ----
 
+const TAG_REGEL = new RegExp(`^#(${TAG_NAME})`, 'u')
+
 function tag(state: StateInline, silent: boolean): boolean {
   const start = state.pos
   if (state.src.charCodeAt(start) !== 0x23 /* # */) return false
   if (start > 0 && !/\s/.test(state.src[start - 1])) return false
-  const treffer = /^#([\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/u.exec(state.src.slice(start))
+  const treffer = TAG_REGEL.exec(state.src.slice(start))
   if (!treffer) return false
   if (!silent) {
     const auf = state.push('html_inline', '', 0)
@@ -174,7 +181,7 @@ function passendesEnde(tokens: Token[], start: number): number {
   return tokens.length - 1
 }
 
-// ---- Aufgaben: - [ ] und - [x] ----
+// ---- Aufgaben: - [ ], - [x] und eigene Zeichen wie - [>] ----
 
 function aufgaben(state: StateCore): void {
   const tokens = state.tokens
@@ -182,7 +189,7 @@ function aufgaben(state: StateCore): void {
     const inline = tokens[i]
     if (inline.type !== 'inline' || tokens[i - 2]?.type !== 'list_item_open') continue
     const erstes = inline.children?.[0]
-    const kasten = erstes?.type === 'text' ? /^\[([ xX/-])\]\s/.exec(erstes.content) : null
+    const kasten = erstes?.type === 'text' ? /^\[([^\]])\]\s/.exec(erstes.content) : null
     if (!erstes || !kasten) continue
     const zeichen = kasten[1] === ' ' ? ' ' : kasten[1].toLowerCase()
     erstes.content = erstes.content.slice(kasten[0].length)

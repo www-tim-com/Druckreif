@@ -91,8 +91,14 @@ async function ordnerLaden(stamm: FileSystemDirectoryHandle): Promise<Vault> {
       vault.dateien = sortiert()
     }
     const schreiber = await h.createWritable()
-    await schreiber.write(text)
-    await schreiber.close()
+    try {
+      await schreiber.write(text)
+      await schreiber.close()
+    } catch (fehler) {
+      // Zwischendatei verwerfen; die Datei selbst bleibt unverändert
+      await schreiber.abort().catch(() => {})
+      throw fehler
+    }
   }
   return vault
 }

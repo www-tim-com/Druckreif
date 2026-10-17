@@ -8,17 +8,17 @@ interface Props {
   auswahl: string | null
   onSprung(blockId: string): void
   onAusblenden(blockId: string, ausblenden: boolean): void
+  istAusgeblendet(blockId: string): boolean
 }
 
-export function Gliederung({ teile, auswahl, onSprung, onAusblenden }: Props) {
+export function Gliederung({ teile, auswahl, onSprung, onAusblenden, istAusgeblendet }: Props) {
   return (
     <ul className="gliederung">
       {teile.flatMap((teil) =>
         teil.bloecke
           .filter((b) => b.typ === 'heading')
           .map((b) => {
-            const index = teil.zuordnung.get(b.id)
-            const versteckt = index !== undefined && teil.layout.items[index]?.hidden === true
+            const versteckt = istAusgeblendet(b.id)
             const ebene = b.pfad.length
             return (
               <li key={b.id} className={`ebene-${Math.min(ebene, 4)}${versteckt ? ' versteckt' : ''}${auswahl === b.id ? ' gewaehlt' : ''}`}>

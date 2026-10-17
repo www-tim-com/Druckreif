@@ -4,7 +4,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, FilePlus2, GripVertical, ArrowDownToLine, X } from 'lucide-react'
 import type { NotizTeil } from '../dokument/aufbauen'
-import { type Mappe, type MappenEintrag, notizName } from '../mappen/mappen'
+import type { Mappe, MappenEintrag } from '../mappen/mappen'
+import { notizName } from '../vault/vault'
 
 interface Props {
   mappe: Mappe
@@ -28,6 +29,8 @@ export function MappeBereich({ mappe, teile, onVerschieben, onEntfernen, onSetze
     <ol className="mappe">
       {mappe.items.map((eintrag, i) => {
         const teil = teile.find((t) => t.mappenIndex === i && t.pfad === eintrag.note)
+        // Reihenfolgedatei: steht für mehrere Notizen, Auszüge gibt es dafür nicht
+        const reihenfolge = !teil && teile.some((t) => t.mappenIndex === i)
         const neueSeite = eintrag.newPage !== false
         return (
           <li
@@ -75,7 +78,12 @@ export function MappeBereich({ mappe, teile, onVerschieben, onEntfernen, onSetze
                 <X size={14} />
               </button>
             </div>
-            {offen === i && <Abschnittswahl eintrag={eintrag} teil={teil} onSetzen={(t) => onSetzen(i, t)} />}
+            {offen === i &&
+              (reihenfolge ? (
+                <p className="mappe-hinweis">Reihenfolgedatei – einzelne Abschnitte lassen sich nur bei einer Notiz wählen.</p>
+              ) : (
+                <Abschnittswahl eintrag={eintrag} teil={teil} onSetzen={(t) => onSetzen(i, t)} />
+              ))}
           </li>
         )
       })}

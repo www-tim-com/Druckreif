@@ -31,15 +31,19 @@ export function demoVault(): Vault {
 
   const vault: Vault = {
     name: 'Demo-Vault',
-    dateien: [...dateiUrls.keys()].sort((a, b) => a.localeCompare(b, 'de')),
+    dateien: sortiert([...dateiUrls.keys()]),
     lesenText: async (pfad) => geschrieben.get(pfad)?.text ?? (await laden(pfad)).text(),
     lesenBlob: async (pfad) => (await laden(pfad)).blob(),
     geaendertAm: async (pfad) => geschrieben.get(pfad)?.zeit ?? 0,
     aktualisieren: async () => {}, // Demo-Dateien ändern sich nicht
     async schreibenText(pfad, text) {
       geschrieben.set(pfad, { text, zeit: Date.now() })
-      if (!vault.dateien.includes(pfad)) vault.dateien = [...vault.dateien, pfad].sort()
+      if (!vault.dateien.includes(pfad)) vault.dateien = sortiert([...vault.dateien, pfad])
     },
   }
   return vault
+}
+
+function sortiert(pfade: string[]): string[] {
+  return pfade.sort((a, b) => a.localeCompare(b, 'de'))
 }

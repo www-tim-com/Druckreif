@@ -3,7 +3,6 @@
 
 import { LAYOUT_ORDNER } from '../layout/layoutDatei'
 import type { Vault } from '../vault/vault'
-import { dateiname, ohneEndung } from '../vault/vault'
 
 export interface MappenEintrag {
   note: string // Pfad der Notiz (oder einer Reihenfolgedatei)
@@ -26,24 +25,29 @@ export interface MappenDatei {
   mappen: Mappe[]
 }
 
-export const MAPPEN_PFAD = `${LAYOUT_ORDNER}/mappen.json`
+const MAPPEN_PFAD = `${LAYOUT_ORDNER}/mappen.json`
 
 export async function mappenLaden(vault: Vault): Promise<MappenDatei> {
   if (!vault.dateien.includes(MAPPEN_PFAD)) return { version: 1, mappen: [] }
+  let daten: { mappen?: unknown }
   try {
-    const daten = JSON.parse(await vault.lesenText(MAPPEN_PFAD)) as MappenDatei
-    return { version: 1, mappen: Array.isArray(daten.mappen) ? daten.mappen : [] }
+    daten = JSON.parse(await vault.lesenText(MAPPEN_PFAD))
   } catch {
     throw new Error(`${MAPPEN_PFAD} ist kein gültiges JSON`)
   }
+  // Unlesbares nie als „keine Mappen“ behandeln – sonst überschriebe die nächste Änderung die Datei
+  const gueltig =
+    Array.isArray(daten?.mappen) &&
+    daten.mappen.every(
+      (m: Partial<Mappe>) =>
+        typeof m?.id === 'string' && typeof m.name === 'string' && Array.isArray(m.items) && m.items.every((e) => typeof e?.note === 'string'),
+    )
+  if (!gueltig) throw new Error(`${MAPPEN_PFAD} ist ungültig`)
+  return { version: 1, mappen: daten.mappen as Mappe[] }
 }
 
 export async function mappenSpeichern(vault: Vault, datei: MappenDatei): Promise<void> {
   await vault.schreibenText(MAPPEN_PFAD, JSON.stringify(datei, null, 2) + '\n')
-}
-
-export function notizName(pfad: string): string {
-  return ohneEndung(dateiname(pfad))
 }
 
 export function neueMappe(datei: MappenDatei, name: string, notizen: string[] = []): { datei: MappenDatei; id: string } {

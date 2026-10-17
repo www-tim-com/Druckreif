@@ -13,19 +13,23 @@ export interface VaultEinstellungen {
   anhangOrdner: string
 }
 
-async function jsonLesen(vault: Vault, pfad: string): Promise<Record<string, unknown>> {
+/** Obsidian-Einstellungsdatei; unlesbar = Standardwerte, aber nie stillschweigend (gelber Hinweis) */
+async function jsonLesen(vault: Vault, pfad: string, hinweise: Hinweis[]): Promise<Record<string, unknown>> {
   if (!vault.dateien.includes(pfad)) return {}
   try {
-    return JSON.parse(await vault.lesenText(pfad))
+    const daten: unknown = JSON.parse(await vault.lesenText(pfad))
+    if (typeof daten === 'object' && daten !== null && !Array.isArray(daten)) return daten as Record<string, unknown>
   } catch {
-    return {}
+    // unten gemeldet
   }
+  hinweise.push({ stufe: 'gelb', notiz: '', text: `${pfad} ist nicht lesbar – Obsidians Standardeinstellungen verwendet` })
+  return {}
 }
 
 export async function vaultEinstellungenLaden(vault: Vault): Promise<{ einstellungen: VaultEinstellungen; hinweise: Hinweis[] }> {
   const hinweise: Hinweis[] = []
-  const app = await jsonLesen(vault, '.obsidian/app.json')
-  const aussehen = await jsonLesen(vault, '.obsidian/appearance.json')
+  const app = await jsonLesen(vault, '.obsidian/app.json', hinweise)
+  const aussehen = await jsonLesen(vault, '.obsidian/appearance.json', hinweise)
   const css: string[] = []
 
   const theme = typeof aussehen.cssTheme === 'string' && aussehen.cssTheme ? aussehen.cssTheme : null

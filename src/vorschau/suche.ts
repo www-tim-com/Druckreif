@@ -8,7 +8,7 @@ export interface Treffer {
   nachher: string
 }
 
-const MAX_TREFFER = 500
+export const MAX_TREFFER = 500
 const KONTEXT = 32
 const BLOCK = 'p, li, h1, h2, h3, h4, h5, h6, td, th, figcaption, pre, dt, dd, .callout-title, .katex-display'
 const bereicheJeDokument = new WeakMap<Document, Range[]>()

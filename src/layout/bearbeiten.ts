@@ -2,12 +2,20 @@
 // Rückgängig/Wiederholen ist deshalb nur ein Stapel von Layouts (siehe App.tsx).
 
 import type { Block } from '../dokument/bloecke'
-import { type BildLayout, type LayoutDatei, type TabellenLayout, type LayoutEintrag, eintragLeer } from './layoutDatei'
+import {
+  type BildLayout,
+  type LayoutDatei,
+  type TabellenLayout,
+  type LayoutEintrag,
+  STANDARD_SCHRIFT_PT,
+  STANDARD_ZEILENABSTAND,
+  eintragLeer,
+} from './layoutDatei'
 import { ankerVon } from './zuordnen'
 
 /**
  * Ändert den Eintrag eines Blocks (legt ihn an, falls es keinen gibt). `index` ist der bereits
- * zugeordnete Eintrag (aus NotizTeil.zuordnung). Leere Einträge fallen weg.
+ * zugeordnete Eintrag im aktuellen Layout (siehe blockSuchen in App.tsx). Leere Einträge fallen weg.
  */
 export function eintragAendern(
   layout: LayoutDatei,
@@ -38,6 +46,18 @@ export function umbruchSetzen(wert: boolean | undefined) {
   return (e: LayoutEintrag): LayoutEintrag => ({ ...e, pageBreakBefore: wert })
 }
 
+/** Umbruch erzwingen (true) bzw. verhindern (false) – oder zurück auf automatisch, wenn er das schon ist */
+export function umbruchUmschalten(wert: boolean) {
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, pageBreakBefore: e.pageBreakBefore === wert ? undefined : wert })
+}
+
+/** Objekt ohne Schlüssel mit undefined; ganz leer = undefined (Layout-Datei bleibt aufgeräumt) */
+function ohneLeere<T extends object>(objekt: T): T | undefined {
+  const kopie = { ...objekt }
+  for (const k of Object.keys(kopie) as (keyof T)[]) if (kopie[k] === undefined) delete kopie[k]
+  return Object.keys(kopie).length ? kopie : undefined
+}
+
 /** Darf über Seiten geteilt werden (true) oder bleibt am Stück (automatisch) */
 export function teilenSetzen(wert: boolean) {
   return (e: LayoutEintrag): LayoutEintrag => ({ ...e, split: wert || undefined })
@@ -53,11 +73,11 @@ export function abstandSetzen(vorher: number | undefined, nachher: number | unde
 
 /** Bildwerte überschreiben; undefined in `teil` setzt den Wert auf automatisch zurück. */
 export function bildSetzen(teil: Partial<BildLayout>) {
-  return (e: LayoutEintrag): LayoutEintrag => {
-    const bild = { ...e.image, ...teil }
-    for (const k of Object.keys(bild) as (keyof BildLayout)[]) if (bild[k] === undefined) delete bild[k]
-    return { ...e, image: Object.keys(bild).length ? bild : undefined }
-  }
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, image: ohneLeere({ ...e.image, ...teil }) })
+}
+
+export function bildZuruecksetzen(e: LayoutEintrag): LayoutEintrag {
+  return { ...e, image: undefined }
 }
 
 /**
@@ -72,6 +92,19 @@ export function umfliessenSetzen(an: boolean) {
 }
 
 export const MAX_BILDVERSATZ_MM = 150
+/** Bild ohne Textumbruch darf etwas nach oben rücken (negativer Abstand oben) */
+export const MIN_BILDVERSATZ_MM = -30
+/** Textbreite: A4 (210 mm) minus Seitenränder 25 + 18 mm aus @page in druck.css */
+export const TEXTBREITE_MM = 167
+
+/** Bild um `dy` mm nach unten/oben schieben (Ziehen), in den erlaubten Grenzen */
+export function bildVerschieben(align: BildLayout['align'], dy: number) {
+  return (e: LayoutEintrag): LayoutEintrag => {
+    const min = e.image?.wrap ? 0 : MIN_BILDVERSATZ_MM
+    const versatz = Math.min(MAX_BILDVERSATZ_MM, Math.max(min, (e.image?.offsetYMm ?? 0) + dy))
+    return bildSetzen({ align, offsetYMm: versatz || undefined })(e)
+  }
+}
 
 /**
  * Wohin ein umfließendes Bild nach dem Ziehen gehört: vor den Block `zielId`, `versatzMm` unter dessen Anfang.
@@ -96,11 +129,16 @@ export function umflussPosition(bloecke: Block[], bildId: string, zielId: string
 
 /** Tabellenwerte überschreiben; undefined setzt zurück. */
 export function tabelleSetzen(teil: Partial<TabellenLayout>) {
-  return (e: LayoutEintrag): LayoutEintrag => {
-    const tabelle = { ...e.table, ...teil }
-    for (const k of Object.keys(tabelle) as (keyof TabellenLayout)[]) if (tabelle[k] === undefined) delete tabelle[k]
-    return { ...e, table: Object.keys(tabelle).length ? tabelle : undefined }
-  }
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, table: ohneLeere({ ...e.table, ...teil }) })
+}
+
+/** Breite in % der Textbreite; 100 % und mehr = automatisch */
+export function tabellenBreiteSetzen(prozent: number | undefined) {
+  return tabelleSetzen({ widthPct: prozent === undefined || prozent >= 100 ? undefined : prozent })
+}
+
+export function tabelleZuruecksetzen(e: LayoutEintrag): LayoutEintrag {
+  return { ...e, table: undefined }
 }
 
 /** Schriftgröße und Zeilenabstand eines Blocks */
@@ -127,11 +165,12 @@ export function eintragZuweisen(layout: LayoutDatei, index: number, block: Block
   return { ...layout, items }
 }
 
-/** Grundschrift und Zeilenabstand der ganzen Notiz */
+/** Grundschrift und Zeilenabstand der ganzen Notiz; der Standardwert wird nicht gespeichert (bleibt automatisch) */
 export function notizSchriftSetzen(layout: LayoutDatei, teil: Partial<LayoutDatei['settings']>): LayoutDatei {
   const settings = { ...layout.settings, ...teil }
-  for (const k of Object.keys(settings) as (keyof typeof settings)[]) if (settings[k] === undefined) delete settings[k]
-  return { ...layout, settings }
+  if (settings.fontSizePt === STANDARD_SCHRIFT_PT) settings.fontSizePt = undefined
+  if (settings.lineHeight === STANDARD_ZEILENABSTAND) settings.lineHeight = undefined
+  return { ...layout, settings: ohneLeere(settings) ?? {} }
 }
 
 /** Eingebettete Notiz einfügen (an) oder wieder nur als Hinweis führen (aus). */
