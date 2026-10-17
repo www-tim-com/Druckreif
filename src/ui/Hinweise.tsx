@@ -4,8 +4,8 @@
 
 import { Eye, FilePlus2, FileMinus2, Link2, Trash2, Wrench, X } from 'lucide-react'
 import type { Hinweis } from '../hinweise'
-import type { Leerraum } from '../vorschau/leerraum'
-import { dateiname, ohneEndung } from '../vault/vault'
+import { type Leerraum, leerraumKnopf } from '../vorschau/leerraum'
+import { notizName } from '../vault/vault'
 
 interface Props {
   hinweise: Hinweis[]
@@ -15,7 +15,6 @@ interface Props {
   onLoeschen(notiz: string, index: number): void
   onEinbettung(notiz: string, ziel: string, einfuegen: boolean): void
   onLeerraum(l: Leerraum): void
-  leerraumKnopf(l: Leerraum): string | null
   onSchliessen(): void
 }
 
@@ -39,14 +38,14 @@ export function Hinweise(p: Props) {
           const eintrag = h.layoutEintrag
           const einbettung = h.einbettung
           const leerraum = h.leerraum
-          const knopf = leerraum ? p.leerraumKnopf(leerraum) : null
+          const knopf = leerraum ? leerraumKnopf(leerraum) : null
           return (
             <li key={i} className={`hinweis ${h.stufe}`}>
               <div className="kopf">{TITEL[h.stufe]}</div>
               <button className="text" disabled={!h.block} onClick={() => h.block && onSprung(h.block)}>
                 {h.text}
               </button>
-              {h.notiz && <div className="notiz">{ohneEndung(dateiname(h.notiz))}</div>}
+              {h.notiz && <div className="notiz">{notizName(h.notiz)}</div>}
               {einbettung && (
                 <div className="aktionen">
                   <button onClick={() => p.onEinbettung(h.notiz, einbettung.ziel, !einbettung.eingefuegt)}>

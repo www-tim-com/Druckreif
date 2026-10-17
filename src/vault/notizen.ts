@@ -1,6 +1,6 @@
 // Liste aller Notizen mit Titel und Frontmatter – für Seitenleiste, Suche und Filter.
 
-import { type Vault, dateiname, endung, istVersteckt, ohneEndung } from './vault'
+import { type Vault, endung, istVersteckt, notizName } from './vault'
 
 export interface Notiz {
   pfad: string
@@ -17,7 +17,7 @@ export async function notizenLaden(vault: Vault): Promise<Notiz[]> {
       const text = await vault.lesenText(pfad)
       return {
         pfad,
-        name: ohneEndung(dateiname(pfad)),
+        name: notizName(pfad),
         frontmatter: frontmatterLesen(text).daten,
         istReihenfolge: reihenfolgeLesen(text) !== null,
       }

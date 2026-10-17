@@ -56,7 +56,15 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   sonst liegt ihr Hintergrund unter dem Bild; solche Blöcke weichen dem ganzen Float aus, nicht nur dem Bild. Deshalb
   „tiefer im Absatz“ als unsichtbarer Float ohne Breite davor (`.umfluss-abstand`) + `clear`, nicht als Innenabstand.
   `image.before` verankert das Bild an einem Block desselben Abschnitts (beim Ziehen gesetzt).
-- Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`) – nie überschreiben.
+- Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`, in der App `kaputteLayouts`) –
+  nie überschreiben. Dasselbe gilt für eine beschädigte `mappen.json` (`mappenGesperrt` in `App.tsx`).
+- Hinweise tragen den Index des Layout-Eintrags aus dem zuletzt aufgebauten Dokument; Aktionen darauf suchen den Eintrag
+  im neuesten Layout über den Anker (`hinweisEintragAendern`), weil sich Indizes bei schnellem Klicken verschieben.
+- KaTeX: nur eine Fassung im Projekt (`overrides` in `package.json`, sonst passt das HTML nicht zu `katex.min.css`).
+  Fehler erkennt `formelFehlerErsetzen()` an der Klasse `katex-error` oder der Fehlerfarbe `#cc0001`.
+- Code- und `$$`-Formelblöcke (auch in Callouts und Listen) erkennt `geschuetzteZeilen()` in `vorbereiten.ts` – auch für
+  das Ausschneiden eingebetteter Abschnitte. Frontmatter entfernt der Aufrufer, nicht `vorbereiten()`.
+- In die Vorschau-iframes geht Vault-CSS nur mit `<` als CSS-Escape (`\3c`), sonst beendet `</style>` das Element.
 
 ## Prüfen
 

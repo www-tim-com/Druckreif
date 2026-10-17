@@ -5,10 +5,10 @@
 
 import { spaltenSetzen } from '../layout/zuordnen'
 
-export type Ausrichtung = 'left' | 'center' | 'right'
+type Ausrichtung = 'left' | 'center' | 'right'
 
 /** Block, an dem ein umfließendes Bild abgelegt wurde (wie in Word am Absatz verankert) */
-export interface Bezug {
+interface Bezug {
   block: string
   versatzMm: number
 }
@@ -70,6 +70,8 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
       return
     }
     const ziel = e.target as Element
+    // Links nie öffnen: das iframe verließe sonst die Seitenansicht (Klick wählt nur den Block)
+    if (ziel.closest('a[href]')) e.preventDefault()
     const leerraum = ziel.closest<HTMLElement>('.druckreif-leerraum button')
     if (leerraum) return rueckrufe().leerraum(Number(leerraum.dataset.leerraum))
     const einbettung = ziel.closest<HTMLElement>('span.einbettung:not(.verschachtelt)')
@@ -313,12 +315,16 @@ function ziehen(
   const los = () => {
     dok.removeEventListener('pointermove', zug)
     dok.removeEventListener('pointerup', los)
+    dok.removeEventListener('pointercancel', los)
     if (bewegt) {
       gezogen.add(dok)
       setTimeout(() => gezogen.delete(dok), 300) // falls kein Klick folgt
     }
     ende(bewegt)
   }
+  // Zeiger festhalten: auch Loslassen außerhalb des iframes (über Menüband oder Navigation) beendet das Ziehen
+  ;(start.target as Element | null)?.setPointerCapture?.(start.pointerId)
   dok.addEventListener('pointermove', zug)
   dok.addEventListener('pointerup', los)
+  dok.addEventListener('pointercancel', los)
 }

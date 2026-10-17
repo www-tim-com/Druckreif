@@ -141,8 +141,11 @@ src/
   vorschau/
     Vorschau.tsx         zwei iframes im Wechsel + Paged.js, Zoom, Drucken
     interaktion.ts       auf der Seite: auswählen, Rechtsklick, Bilder ziehen und skalieren
+    leerraum.ts          halb leere Seiten finden und markieren
+    suche.ts             Suchen im Dokument (Strg+F)
   ui/                    Word-Oberfläche: Titelleiste, Menueband (+ Band-Bausteine), Navigationsbereich,
-                         Mappenreiter, MappeBereich, Seitenleiste, Gliederung, Hinweise, Statusleiste, Kontextmenue, Datei
+                         Mappenreiter, MappeBereich, Seitenleiste, Gliederung, Seitenminiaturen, Hinweise, Statusleiste,
+                         Kontextmenue, Datei
 demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisung
 ```
 
@@ -153,7 +156,8 @@ demo/vault/              Demo-Vault mit allen Syntax-Fällen der Export-Anweisun
 - **Callout-Icons** fehlen noch (nur Titel).
 - **Erweiterungen des Layout-Formats:** `hidden`, `fontSizePt`/`lineHeight` am Block, `split` am Block,
   `settings.lineHeight`, `settings.embeds` (eingefügte Notizen), `table` (`widthPct`, `align`, `columnsPct`, `fontSizePt`,
-  `compact`, `split`). Ältere Dateien bleiben gültig. In `mappen.json`: `inkSaving` pro Mappe.
+  `compact`, `split`), `index` auch im Anker von Bildern (unterscheidet Kopien desselben Bildes im Abschnitt).
+  Ältere Dateien bleiben gültig. In `mappen.json`: `inkSaving` pro Mappe.
 - **Tabellen über Seiten:** Paged.js wiederholt die Kopfzeile auf der Folgeseite nicht zuverlässig.
 - **Ausblenden und Auszüge** nehmen Inhalt aus dem Druck – nur auf ausdrücklichen Wunsch. Ausgeblendetes erscheint immer
   in den Hinweisen, damit nie unbemerkt Inhalt fehlt.

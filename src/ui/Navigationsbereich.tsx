@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import type { RefObject } from 'react'
-import type { Treffer } from '../vorschau/suche'
+import { MAX_TREFFER, type Treffer } from '../vorschau/suche'
 import type { Notiz } from '../vault/notizen'
 import type { NotizTeil } from '../dokument/aufbauen'
 import type { Mappe, MappenEintrag } from '../mappen/mappen'
@@ -28,6 +28,8 @@ interface Props {
   auswahl: string | null
   onSprung(blockId: string): void
   onAusblenden(blockId: string, ausblenden: boolean): void
+  /** nach dem neuesten Layout, nicht nach dem zuletzt aufgebauten Dokument */
+  istAusgeblendet(blockId: string): boolean
   onSchliessen(): void
 
   suchfeld: RefObject<HTMLInputElement | null>
@@ -120,7 +122,7 @@ export function Navigationsbereich(p: Props) {
         <Seitenleiste notizen={p.notizen} inMappe={inMappe} onKlick={p.onNotizKlick} onNeueMappe={p.onNeueMappe} />
       )}
       {ansicht === 'gliederung' && (
-        <Gliederung teile={p.teile} auswahl={p.auswahl} onSprung={p.onSprung} onAusblenden={p.onAusblenden} />
+        <Gliederung teile={p.teile} auswahl={p.auswahl} onSprung={p.onSprung} onAusblenden={p.onAusblenden} istAusgeblendet={p.istAusgeblendet} />
       )}
       {ansicht === 'seiten' && (
         <Seitenminiaturen fassung={p.fassung} miniaturHtml={p.miniaturHtml} seite={p.seite} leerraumSeiten={p.leerraumSeiten} onSeite={p.onSeite} />
@@ -135,7 +137,7 @@ function Suchergebnisse({ treffer, trefferAktiv, onTreffer }: Props) {
   return (
     <div className="suchergebnisse">
       <div className="anzahl">
-        {treffer.length === 0 ? 'Keine Treffer' : `${trefferAktiv + 1} von ${treffer.length}${treffer.length >= 500 ? '+' : ''} Treffern`}
+        {treffer.length === 0 ? 'Keine Treffer' : `${trefferAktiv + 1} von ${treffer.length}${treffer.length >= MAX_TREFFER ? '+' : ''} Treffern`}
       </div>
       <ul>
         {treffer.map((t, i) => (

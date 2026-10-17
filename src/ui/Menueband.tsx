@@ -33,34 +33,40 @@ import {
   WandSparkles,
   WrapText,
 } from 'lucide-react'
-import type { LayoutEintrag } from '../layout/layoutDatei'
+import { type BlockTyp, type LayoutEintrag, STANDARD_SCHRIFT_PT, STANDARD_ZEILENABSTAND } from '../layout/layoutDatei'
 import {
   abstandSetzen,
   ausblendenSetzen,
   bildSetzen,
+  bildZuruecksetzen,
   eintragZuruecksetzen,
   tabelleSetzen,
+  tabelleZuruecksetzen,
+  tabellenBreiteSetzen,
   teilenSetzen,
   umbruchSetzen,
+  umbruchUmschalten,
   umfliessenSetzen,
   MAX_BILDVERSATZ_MM,
+  MIN_BILDVERSATZ_MM,
+  TEXTBREITE_MM,
 } from '../layout/bearbeiten'
-import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld } from './Band'
+import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld, ZOOM_MAX, ZOOM_MIN, zahlText } from './Band'
 
 export type Reiter = 'start' | 'layout' | 'ansicht' | 'bild' | 'tabelle'
 
-export interface Schrift {
+interface Schrift {
   fontSizePt?: number
   lineHeight?: number
 }
 
-export interface GewaehlterBlock {
-  typ: string
+interface GewaehlterBlock {
+  typ: BlockTyp
   beschreibung: string // z. B. "Absatz in „Atemmechanik“"
   eintrag: LayoutEintrag | undefined
 }
 
-export interface BandProps {
+interface BandProps {
   reiter: Reiter
   onReiter(r: Reiter): void
   onDatei(): void
@@ -167,7 +173,7 @@ function StartReiter(p: BandProps) {
           <Zahlfeld
             beschriftung="Schriftgröße"
             wert={p.auswahlSchrift?.fontSizePt}
-            platzhalter={zahl(p.notizSchrift.fontSizePt ?? 10.5)}
+            platzhalter={zahlText(p.notizSchrift.fontSizePt ?? STANDARD_SCHRIFT_PT)}
             einheit="pt"
             schritt={0.5}
             min={6}
@@ -178,7 +184,7 @@ function StartReiter(p: BandProps) {
           <Zahlfeld
             beschriftung="Zeilenabstand"
             wert={p.auswahlSchrift?.lineHeight}
-            platzhalter={zahl(p.notizSchrift.lineHeight ?? 1.35)}
+            platzhalter={zahlText(p.notizSchrift.lineHeight ?? STANDARD_ZEILENABSTAND)}
             einheit="×"
             schritt={0.05}
             min={0.9}
@@ -199,7 +205,7 @@ function StartReiter(p: BandProps) {
           tipp="Seitenumbruch vor dem gewählten Block (Strg+Enter)"
           aktiv={e?.pageBreakBefore === true}
           gesperrt={!p.block}
-          onClick={() => p.blockAendern(umbruchSetzen(e?.pageBreakBefore === true ? undefined : true))}
+          onClick={() => p.blockAendern(umbruchUmschalten(true))}
         />
       </Gruppe>
       <Gruppe titel="Bearbeiten">
@@ -267,10 +273,10 @@ function LayoutReiter(p: BandProps) {
       <BlockGruppe {...p} />
       <Gruppe titel={p.notizName ? `Notiz „${kurz(p.notizName)}“` : 'Notiz'}>
         <div className="spalte">
-          <Zahlfeld beschriftung="Grundschrift" wert={p.notizSchrift.fontSizePt} platzhalter="10,5" einheit="pt" schritt={0.5} min={7} max={16} gesperrt={!p.notizName}
-            onWert={(pt) => p.onNotizSchrift({ fontSizePt: pt === 10.5 ? undefined : pt })} />
-          <Zahlfeld beschriftung="Zeilenabstand" wert={p.notizSchrift.lineHeight} platzhalter="1,35" einheit="×" schritt={0.05} min={0.9} max={2.5} gesperrt={!p.notizName}
-            onWert={(z) => p.onNotizSchrift({ lineHeight: z === 1.35 ? undefined : z })} />
+          <Zahlfeld beschriftung="Grundschrift" wert={p.notizSchrift.fontSizePt} platzhalter={zahlText(STANDARD_SCHRIFT_PT)} einheit="pt" schritt={0.5} min={7} max={16} gesperrt={!p.notizName}
+            onWert={(pt) => p.onNotizSchrift({ fontSizePt: pt })} />
+          <Zahlfeld beschriftung="Zeilenabstand" wert={p.notizSchrift.lineHeight} platzhalter={zahlText(STANDARD_ZEILENABSTAND)} einheit="×" schritt={0.05} min={0.9} max={2.5} gesperrt={!p.notizName}
+            onWert={(z) => p.onNotizSchrift({ lineHeight: z })} />
         </div>
         <GrosserKnopf symbol={FileText} text="Layout zurücksetzen" gesperrt={!p.notizHatLayout} onClick={p.notizZuruecksetzen} tipp="Alle manuellen Änderungen dieser Notiz verwerfen" />
       </Gruppe>
@@ -327,9 +333,9 @@ function AnsichtReiter(p: BandProps) {
   return (
     <>
       <Gruppe titel="Zoom">
-        <KleinerKnopf symbol={Minus} text="Verkleinern" onClick={() => p.onZoom(p.zoom - 0.1)} gesperrt={p.zoom <= 0.3} />
+        <KleinerKnopf symbol={Minus} text="Verkleinern" onClick={() => p.onZoom(p.zoom - 0.1)} gesperrt={p.zoom <= ZOOM_MIN} />
         <GrosserKnopf symbol={Maximize2} text="100 %" onClick={() => p.onZoom(1)} />
-        <KleinerKnopf symbol={Plus} text="Vergrößern" onClick={() => p.onZoom(p.zoom + 0.1)} gesperrt={p.zoom >= 3} />
+        <KleinerKnopf symbol={Plus} text="Vergrößern" onClick={() => p.onZoom(p.zoom + 0.1)} gesperrt={p.zoom >= ZOOM_MAX} />
       </Gruppe>
       <Gruppe titel="Vault">
         <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen (F5)" onClick={p.aktualisieren} />
@@ -353,7 +359,7 @@ function BildReiter(p: BandProps) {
     <>
       <Gruppe titel="Größe">
         <div className="spalte">
-          <Zahlfeld beschriftung="Breite" wert={bild?.widthMm} platzhalter={p.bildIstMm ? String(p.bildIstMm) : 'auto'} start={p.bildIstMm ?? 80} einheit="mm" schritt={5} min={15} max={167} onWert={(mm) => setzen({ widthMm: mm })} />
+          <Zahlfeld beschriftung="Breite" wert={bild?.widthMm} platzhalter={p.bildIstMm ? String(p.bildIstMm) : 'auto'} start={p.bildIstMm ?? 80} einheit="mm" schritt={5} min={15} max={TEXTBREITE_MM} onWert={(mm) => setzen({ widthMm: mm })} />
           <KleinerKnopf symbol={Image} text="Originalgröße" gesperrt={bild?.widthMm === undefined} onClick={() => setzen({ widthMm: undefined })} />
         </div>
       </Gruppe>
@@ -374,12 +380,12 @@ function BildReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Position">
         <div className="spalte">
-          <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : -30} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
+          <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : MIN_BILDVERSATZ_MM} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
           <span className="band-info" title="Bild auf der Seite ziehen verschiebt es, die Ecken ändern die Größe">Ziehen: verschieben · Ecke: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Zurücksetzen">
-        <GrosserKnopf symbol={RotateCcw} text="Bild zurücksetzen" gesperrt={!bild} onClick={() => p.blockAendern((e) => ({ ...e, image: undefined }))} />
+        <GrosserKnopf symbol={RotateCcw} text="Bild zurücksetzen" gesperrt={!bild} onClick={() => p.blockAendern(bildZuruecksetzen)} />
       </Gruppe>
     </>
   )
@@ -393,7 +399,7 @@ function TabellenReiter(p: BandProps) {
     <>
       <Gruppe titel="Größe">
         <div className="spalte">
-          <Zahlfeld beschriftung="Breite" wert={t?.widthPct} platzhalter="100" einheit="%" schritt={5} min={20} max={100} onWert={(w) => setzen({ widthPct: w === 100 ? undefined : w })} />
+          <Zahlfeld beschriftung="Breite" wert={t?.widthPct} platzhalter="100" einheit="%" schritt={5} min={20} max={100} onWert={(w) => p.blockAendern(tabellenBreiteSetzen(w))} />
           <span className="band-info">Rechten Rand oder Spaltengrenze ziehen</span>
         </div>
       </Gruppe>
@@ -409,7 +415,7 @@ function TabellenReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Schrift und Zeilen">
         <div className="spalte">
-          <Zahlfeld beschriftung="Schriftgröße" wert={t?.fontSizePt} platzhalter={zahl(p.notizSchrift.fontSizePt ?? 10.5)} einheit="pt" schritt={0.5} min={6} max={16} onWert={(pt) => setzen({ fontSizePt: pt })} />
+          <Zahlfeld beschriftung="Schriftgröße" wert={t?.fontSizePt} platzhalter={zahlText(p.notizSchrift.fontSizePt ?? STANDARD_SCHRIFT_PT)} einheit="pt" schritt={0.5} min={6} max={16} onWert={(pt) => setzen({ fontSizePt: pt })} />
           <KleinerKnopf symbol={Rows3} text="Kompakte Zeilen" aktiv={!!t?.compact} onClick={() => setzen({ compact: t?.compact ? undefined : true })} tipp="Weniger Innenabstand in den Zellen" />
         </div>
       </Gruppe>
@@ -417,14 +423,10 @@ function TabellenReiter(p: BandProps) {
         <GrosserKnopf symbol={ALargeSmall} text="Über Seiten teilen" aktiv={!!t?.split} onClick={() => setzen({ split: t?.split ? undefined : true })} tipp="Lange Tabelle darf auf der nächsten Seite weiterlaufen (sonst am Stück)" />
       </Gruppe>
       <Gruppe titel="Zurücksetzen">
-        <GrosserKnopf symbol={RotateCcw} text="Tabelle zurücksetzen" gesperrt={!t} onClick={() => setzen({ widthPct: undefined, align: undefined, columnsPct: undefined, fontSizePt: undefined, compact: undefined, split: undefined })} />
+        <GrosserKnopf symbol={RotateCcw} text="Tabelle zurücksetzen" gesperrt={!t} onClick={() => p.blockAendern(tabelleZuruecksetzen)} />
       </Gruppe>
     </>
   )
-}
-
-function zahl(z: number): string {
-  return String(z).replace('.', ',')
 }
 
 function kurz(text: string, max = 18): string {

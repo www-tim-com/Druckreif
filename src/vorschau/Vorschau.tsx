@@ -236,7 +236,9 @@ function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: bo
 }
 
 function seiteBauen(html: string, vaultCss: string[], titel: string, fassung: number, tinteSparen: boolean): string {
-  const stil = (css: string) => `<style>${urlsAbsolut(css)}</style>`
+  // „<“ als CSS-Escape: ein „</style>“ in Theme oder Snippet aus dem Vault darf das style-Element nicht beenden
+  // (sonst liefe dahinter stehendes HTML samt <script> mit Zugriff auf den Vault). In CSS bedeutet \3c dasselbe.
+  const stil = (css: string) => `<style>${urlsAbsolut(css).replace(/</g, '\\3c ')}</style>`
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><title>${titel.replace(/</g, '&lt;')}</title>
 ${stil(SCHRIFTEN)}${stil(obsidianBasis)}${vaultCss.map(stil).join('')}${stil(druckCss)}

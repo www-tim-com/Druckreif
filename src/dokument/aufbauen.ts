@@ -7,8 +7,9 @@ import { type LayoutDatei, layoutLaden, layoutPfad, leeresLayout } from '../layo
 import { bilderFinden, einbettungenFinden, markdownUmwandeln } from '../markdown/umwandeln'
 import { anhangOrdnerFuer, type VaultEinstellungen } from '../stil/stil'
 import { frontmatterLesen, reihenfolgeLesen } from '../vault/notizen'
-import { type Vault, dateiFinden, dateiname, ohneEndung, ordner } from '../vault/vault'
+import { type Vault, dateiFinden, notizName, ordner } from '../vault/vault'
 import type { MappenEintrag } from '../mappen/mappen'
+import { geschuetzteZeilen } from '../markdown/vorbereiten'
 import { type Block, gliedern, normalisieren } from './bloecke'
 import { diagrammeZeichnen } from './diagramme'
 
@@ -17,8 +18,6 @@ export interface NotizTeil {
   titel: string
   bloecke: Block[]
   layout: LayoutDatei
-  /** Block-ID -> Index des Layout-Eintrags, der an diesem Block hängt */
-  zuordnung: Map<string, number>
   /** Index des Mappen-Eintrags, aus dem diese Notiz stammt (bei Reihenfolgedateien mehrere Notizen je Eintrag) */
   mappenIndex: number
   /** ##-Abschnitte der Notiz, zur Auswahl „nur einzelne Abschnitte“ */
@@ -64,7 +63,12 @@ export async function dokumentAufbauen(
     quellen.set(eintrag.note, await stempel(vault, eintrag.note))
     const reihenfolge = reihenfolgeLesen(await vault.lesenText(eintrag.note))
     if (!reihenfolge) teile.push({ pfad: eintrag.note, eintrag, index })
-    else for (const pfad of notizenDerReihenfolge(vault, reihenfolge.notizen, eintrag.note, hinweise)) teile.push({ pfad, eintrag: { note: pfad }, index })
+    else {
+      // „direkt anschließen“ des Eintrags gilt für die erste Notiz der Reihenfolge
+      for (const [i, pfad] of notizenDerReihenfolge(vault, reihenfolge.notizen, eintrag.note, hinweise).entries()) {
+        teile.push({ pfad, eintrag: { note: pfad, newPage: i === 0 ? eintrag.newPage : undefined }, index })
+      }
+    }
   }
 
   const pfade = teile.map((t) => t.pfad)
@@ -79,7 +83,7 @@ export async function dokumentAufbauen(
     container.append(teil.article)
     notizen.push(teil.notiz)
   }
-  await diagrammeZeichnen(container, (text) => hinweise.push({ stufe: 'rot', notiz: '', text }))
+  await diagrammeZeichnen(container, (text, notiz) => hinweise.push({ stufe: 'rot', notiz, text }))
 
   // Zeichen, die in Dateinamen nicht erlaubt sind, durch Bindestrich ersetzen
   return { titel: titel.replace(/[\\/:*?"<>|]/g, '-'), html: container.innerHTML, notizen, hinweise, quellen }
@@ -88,7 +92,8 @@ export async function dokumentAufbauen(
 function notizenDerReihenfolge(vault: Vault, namen: string[], reihenfolgePfad: string, hinweise: Hinweis[]): string[] {
   const pfade: string[] = []
   for (const name of namen) {
-    const treffer = dateiFinden(vault, `${name}.md`, '', '')
+    // wie ![[…]]: .md darf fehlen, bei gleichen Namen gewinnt der Ordner der Reihenfolgedatei
+    const treffer = dateiFinden(vault, notizDateiname(name), ordner(reihenfolgePfad), '')
     if (typeof treffer === 'string') pfade.push(treffer)
     else {
       const grund = treffer ? `mehrdeutig (${treffer.join(', ')})` : 'nicht gefunden'
@@ -108,9 +113,9 @@ async function notizAufbauen(
   hinweise: Hinweis[],
   quellen: Map<string, number>,
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
-  const name = ohneEndung(dateiname(pfad))
+  const name = notizName(pfad)
   if (!quellen.has(pfad)) quellen.set(pfad, await stempel(vault, pfad))
-  const text = await vault.lesenText(pfad)
+  const text = frontmatterLesen(await vault.lesenText(pfad)).rest
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
   // Layout zuerst: es sagt, welche eingebetteten Notizen eingefügt werden
@@ -127,8 +132,8 @@ async function notizAufbauen(
   // Bilder und eingebettete Notizen vorab laden, weil markdown-it synchron arbeitet
   const bildUrls = await bilderLaden(vault, text, pfad, einstellungen, quellen)
   const einbettungen = new Map<string, string | null>()
-  for (const ziel of einbettungenFinden(text)) {
-    if (einfuegen.has(ziel)) einbettungen.set(ziel, await einbettungAufbauen(vault, ziel, pfad, einstellungen, quellen, hinweis))
+  for (const [i, ziel] of einbettungenFinden(text).entries()) {
+    if (einfuegen.has(ziel)) einbettungen.set(ziel, await einbettungAufbauen(vault, ziel, pfad, `${praefix}-e${i}`, einstellungen, quellen, hinweis))
   }
 
   const html = markdownUmwandeln(
@@ -150,6 +155,7 @@ async function notizAufbauen(
       },
     },
     einstellungen.strictLineBreaks,
+    praefix,
   )
 
   const article = document.createElement('article')
@@ -161,12 +167,9 @@ async function notizAufbauen(
   for (const t of weitereTitel) hinweis('info', `Weitere #-Überschrift „${t}“ als Kapitel behandelt`)
   if (!vault.dateien.includes(layoutPfad(pfad))) layout = { ...layout, title: titel }
 
-  let zuordnung = new Map<string, number>()
   if (!layoutFehler) {
     try {
-      const angewendet = layoutAnwenden(article, layout, bloecke, pfad)
-      hinweise.push(...angewendet.hinweise)
-      zuordnung = angewendet.zuordnung
+      hinweise.push(...layoutAnwenden(article, layout, bloecke, pfad))
     } catch (fehler) {
       layoutFehler = `Layout-Datei ${layoutPfad(pfad)} ist ungültig (${(fehler as Error).message})`
     }
@@ -181,7 +184,7 @@ async function notizAufbauen(
   const abschnitte = [...new Set(bloecke.filter((b) => b.typ === 'heading' && b.pfad.length === 2).map((b) => b.pfad[1]))]
   const hatEinleitung = bloecke.some((b) => b.pfad.length === 1 && b.typ !== 'heading' && b.typ !== 'footnotes')
   const layoutKaputt = layoutFehler !== null
-  return { article, notiz: { pfad, titel, bloecke, layout, zuordnung, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
+  return { article, notiz: { pfad, titel, bloecke, layout, mappenIndex, abschnitte, hatEinleitung, layoutKaputt } }
 }
 
 async function bilderLaden(
@@ -215,6 +218,7 @@ async function einbettungAufbauen(
   vault: Vault,
   ziel: string,
   notizPfad: string,
+  id: string,
   einstellungen: VaultEinstellungen,
   quellen: Map<string, number>,
   hinweis: (stufe: Stufe, text: string) => void,
@@ -225,7 +229,7 @@ async function einbettungAufbauen(
     hinweis('rot', `Eingebettete Notiz „${ziel}“: Verweise auf einzelne Blöcke (^…) werden nicht unterstützt`)
     return null
   }
-  const treffer = dateiFinden(vault, /\.md$/i.test(name) ? name.trim() : `${name.trim()}.md`, ordner(notizPfad), '')
+  const treffer = dateiFinden(vault, notizDateiname(name), ordner(notizPfad), '')
   if (typeof treffer !== 'string') {
     const grund = treffer ? `mehrdeutig (${treffer.join(', ')})` : 'nicht gefunden'
     hinweis('rot', `Eingebettete Notiz „${ziel}“ ${grund} – nicht eingefügt`)
@@ -246,19 +250,23 @@ async function einbettungAufbauen(
     text = teil
   }
   const bildUrls = await bilderLaden(vault, text, treffer, einstellungen, quellen)
-  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks)
+  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks, id)
+}
+
+/** Dateiname einer Notiz aus einem Wikilink: „.md“ darf fehlen. */
+function notizDateiname(name: string): string {
+  return /\.md$/i.test(name.trim()) ? name.trim() : `${name.trim()}.md`
 }
 
 /** Text ab der Überschrift `titel` bis vor die nächste Überschrift gleicher oder höherer Ebene (Codeblöcke beachtet). */
-export function abschnittAusschneiden(text: string, titel: string): string | null {
+function abschnittAusschneiden(text: string, titel: string): string | null {
   const zeilen = text.split(/\r?\n/)
+  const geschuetzt = geschuetzteZeilen(zeilen)
   let start = -1
   let ebene = 0
-  let imCode = false
   for (let i = 0; i < zeilen.length; i++) {
-    if (/^\s{0,3}(`{3,}|~{3,})/.test(zeilen[i])) imCode = !imCode
-    if (imCode) continue
-    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(zeilen[i])
+    if (geschuetzt[i]) continue
+    const h = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(zeilen[i])
     if (!h) continue
     if (start < 0 && normalisieren(h[2]) === normalisieren(titel)) {
       start = i
@@ -276,6 +284,8 @@ export function abschnittAusschneiden(text: string, titel: string): string | nul
  * bekommen einen Absatz ohne Höhe (kein Block, damit sich die Zählung der übrigen Blöcke nicht verschiebt).
  */
 function einbettungenEinsetzen(article: HTMLElement, einbettungen: Map<string, string | null>) {
+  // zuletzt hinter einem Absatz eingesetzter Inhalt: der nächste kommt dahinter (Reihenfolge wie in der Notiz)
+  const zuletzt = new Map<Element, Element>()
   for (const platzhalter of [...article.querySelectorAll<HTMLElement>('span.einbettung')]) {
     const absatz = platzhalter.parentElement
     const allein = absatz?.tagName === 'P' && absatz.parentElement === article && !absatz.textContent?.trim() && absatz.querySelectorAll('img, span.einbettung').length === 1
@@ -290,7 +300,9 @@ function einbettungenEinsetzen(article: HTMLElement, einbettungen: Map<string, s
     div.innerHTML = inhalt
     if (allein) absatz.replaceWith(div)
     else {
-      ;(absatz?.parentElement === article ? absatz : platzhalter).after(div)
+      const anker = absatz?.parentElement === article ? absatz : platzhalter
+      ;(zuletzt.get(anker) ?? anker).after(div)
+      zuletzt.set(anker, div)
       platzhalter.remove()
     }
   }
@@ -302,13 +314,20 @@ function einbettungenEinsetzen(article: HTMLElement, einbettungen: Map<string, s
  */
 function abschnitteAuswaehlen(article: HTMLElement, auswahl: string[], hinweis: (stufe: Stufe, text: string) => void) {
   const wahl = new Set(auswahl)
+  const vorhanden = new Set<string>()
   for (const kind of [...article.children]) {
     if (kind.matches('.notiz-titel, .footnotes, .footnotes-sep')) continue
-    const titel = kind.matches('section.kapitel') ? (kind.querySelector(':scope > h2')?.textContent?.trim() ?? '') : ''
+    // auch ###-Abschnitte ohne ## darüber stehen als eigener Abschnitt in der Auswahl (siehe NotizTeil.abschnitte)
+    const titel = kind.tagName === 'SECTION' ? (kind.firstElementChild?.textContent?.trim() ?? '') : ''
+    vorhanden.add(titel)
     if (!wahl.has(titel)) kind.remove()
   }
   const namen = auswahl.map((a) => (a ? `„${a}“` : 'Einleitung'))
   hinweis('info', `Nur ausgewählte Abschnitte im Druck: ${namen.join(', ') || 'keine'}`)
+  // Umbenannte oder gelöschte Überschrift: nie stillschweigend weglassen
+  for (const a of auswahl.filter((a) => a && !vorhanden.has(a))) {
+    hinweis('rot', `Ausgewählter Abschnitt „${a}“ nicht mehr in der Notiz (umbenannt?) – bitte unter Mappe › Abschnitte neu wählen`)
+  }
 }
 
 // Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden.

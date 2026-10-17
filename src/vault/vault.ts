@@ -4,7 +4,7 @@
 
 export interface Vault {
   name: string
-  /** alle Dateien im Vault (ohne .trash), sortiert */
+  /** alle Dateien im Vault (ohne .trash, .git, node_modules), sortiert */
   dateien: string[]
   lesenText(pfad: string): Promise<string>
   lesenBlob(pfad: string): Promise<Blob>
@@ -15,7 +15,7 @@ export interface Vault {
   aktualisieren(): Promise<void>
 }
 
-export const BILD_ENDUNGEN = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
+export const BILD_ENDUNGEN = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']
 
 export function dateiname(pfad: string): string {
   return pfad.slice(pfad.lastIndexOf('/') + 1)
@@ -31,6 +31,11 @@ export function ohneEndung(name: string): string {
   return i <= 0 ? name : name.slice(0, i)
 }
 
+/** Anzeigename einer Notiz: Dateiname ohne .md */
+export function notizName(pfad: string): string {
+  return ohneEndung(dateiname(pfad))
+}
+
 export function endung(name: string): string {
   const i = name.lastIndexOf('.')
   return i <= 0 ? '' : name.slice(i + 1).toLowerCase()
@@ -42,8 +47,8 @@ export function istVersteckt(pfad: string): boolean {
 }
 
 /**
- * Sucht eine Datei wie Obsidian per Name im ganzen Vault.
- * Bei mehreren Treffern: zuerst der Ordner der Notiz, dann der Anhang-Ordner.
+ * Sucht eine Datei wie Obsidian per Name im ganzen Vault, ohne auf Groß-/Kleinschreibung zu achten
+ * (genaue Schreibweise gewinnt). Bei mehreren Treffern: zuerst der Ordner der Notiz, dann der Anhang-Ordner.
  * Liefert null bei keinem Treffer, ein Array bei Mehrdeutigkeit.
  */
 export function dateiFinden(
@@ -56,10 +61,15 @@ export function dateiFinden(
   // Pfadangabe mit Ordner ("Bilder/x.png") direkt prüfen
   if (gesucht.includes('/')) {
     const relativ = notizOrdner ? `${notizOrdner}/${gesucht}` : gesucht
-    if (vault.dateien.includes(relativ)) return relativ
-    if (vault.dateien.includes(gesucht)) return gesucht
+    for (const pfad of [relativ, gesucht]) {
+      const gefunden = vault.dateien.find((p) => p === pfad) ?? vault.dateien.find((p) => p.toLowerCase() === pfad.toLowerCase())
+      if (gefunden) return gefunden
+    }
   }
-  const treffer = vault.dateien.filter((p) => !istVersteckt(p) && dateiname(p) === dateiname(gesucht))
+  const gesuchterName = dateiname(gesucht)
+  const kandidaten = vault.dateien.filter((p) => !istVersteckt(p))
+  const genau = kandidaten.filter((p) => dateiname(p) === gesuchterName)
+  const treffer = genau.length > 0 ? genau : kandidaten.filter((p) => dateiname(p).toLowerCase() === gesuchterName.toLowerCase())
   if (treffer.length <= 1) return treffer[0] ?? null
   const imOrdner = treffer.filter((p) => ordner(p) === notizOrdner)
   if (imOrdner.length === 1) return imOrdner[0]

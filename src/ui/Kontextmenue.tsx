@@ -3,13 +3,13 @@
 import { useEffect } from 'react'
 import { AlignCenter, AlignLeft, AlignRight, Ban, EyeOff, RotateCcw, SeparatorHorizontal, WrapText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { LayoutEintrag } from '../layout/layoutDatei'
-import { ausblendenSetzen, bildSetzen, eintragZuruecksetzen, umbruchSetzen, umfliessenSetzen } from '../layout/bearbeiten'
+import type { BlockTyp, LayoutEintrag } from '../layout/layoutDatei'
+import { ausblendenSetzen, bildSetzen, eintragZuruecksetzen, umbruchUmschalten, umfliessenSetzen } from '../layout/bearbeiten'
 
 interface Props {
   x: number
   y: number
-  typ: string
+  typ: BlockTyp
   eintrag: LayoutEintrag | undefined
   blockAendern(aendern: (e: LayoutEintrag) => LayoutEintrag): void
   onSchliessen(): void
@@ -45,8 +45,8 @@ export function Kontextmenue({ x, y, typ, eintrag: e, blockAendern, onSchliessen
 
   return (
     <div className="kontextmenue" style={{ left: Math.min(x, innerWidth - 240), top: Math.min(y, innerHeight - 320) }}>
-      {punkt(SeparatorHorizontal, 'Seitenumbruch davor', umbruchSetzen(e?.pageBreakBefore === true ? undefined : true), e?.pageBreakBefore === true)}
-      {punkt(Ban, 'Umbruch davor verhindern', umbruchSetzen(e?.pageBreakBefore === false ? undefined : false), e?.pageBreakBefore === false)}
+      {punkt(SeparatorHorizontal, 'Seitenumbruch davor', umbruchUmschalten(true), e?.pageBreakBefore === true)}
+      {punkt(Ban, 'Umbruch davor verhindern', umbruchUmschalten(false), e?.pageBreakBefore === false)}
       <hr />
       {punkt(EyeOff, typ === 'heading' ? 'Abschnitt im Druck ausblenden' : 'Im Druck ausblenden', ausblendenSetzen(true))}
       {typ === 'image' && (

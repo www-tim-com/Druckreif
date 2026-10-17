@@ -14,7 +14,7 @@ export interface Block {
   text: string // normalisierter Text, für die Ähnlichkeitsprüfung
 }
 
-export interface Gegliedert {
+interface Gegliedert {
   titel: string
   bloecke: Block[]
   /** weitere #-Überschriften, die als ##-Kapitel behandelt wurden */
@@ -40,7 +40,7 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     h1.textContent = dateiname
     wurzel.prepend(h1)
   }
-  h1Markieren(wurzel.firstElementChild as HTMLElement)
+  wurzel.firstElementChild!.classList.add('notiz-titel')
 
   // Weitere # werden wie ## behandelt (Text bleibt gleich, nur die Ebene ändert sich)
   const weitereTitel: string[] = []
@@ -52,7 +52,8 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
   }
 
   // Abschnitts-Container: section.kapitel (##) > section.abschnitt (###) > section.unterabschnitt (####)
-  const ebenenKlasse: Record<number, string> = { 2: 'kapitel', 3: 'abschnitt', 4: 'unterabschnitt' }
+  // > section.ebene5 / ebene6 (nur damit Ausblenden auch dort den ganzen Abschnitt trifft)
+  const ebenenKlasse: Record<number, string> = { 2: 'kapitel', 3: 'abschnitt', 4: 'unterabschnitt', 5: 'ebene5', 6: 'ebene6' }
   const stapel: { ebene: number; el: HTMLElement }[] = [{ ebene: 1, el: wurzel }]
   const bloecke: Block[] = []
   const pfad: string[] = [titel]
@@ -60,7 +61,7 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
 
   for (const el of [...wurzel.children] as HTMLElement[]) {
     const ebene = /^H([1-6])$/.exec(el.tagName) ? Number(el.tagName[1]) : 0
-    if (ebene >= 2 && ebene <= 4) {
+    if (ebene >= 2) {
       while (stapel[stapel.length - 1].ebene >= ebene) stapel.pop()
       const section = dok.createElement('section')
       section.className = ebenenKlasse[ebene]
@@ -83,7 +84,7 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     const typ: BlockTyp = ebene ? 'heading' : blockTyp(el)
     const bildname = typ === 'image' ? el.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined
     const text = normalisieren(el.textContent ?? '')
-    const blockPfad = pfad.filter(Boolean)
+    const blockPfad = zurNotiz ? [titel] : pfad.filter(Boolean)
     const schluessel = blockPfad.join('>') + '|' + typ
     const index = zaehler.get(schluessel) ?? 0
     zaehler.set(schluessel, index + 1)
@@ -97,10 +98,6 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     if (!kapitel.querySelector(':scope > section.abschnitt')) kapitel.classList.add('am-stueck')
   }
   return { titel, bloecke, weitereTitel }
-}
-
-function h1Markieren(h1: HTMLElement) {
-  h1.classList.add('notiz-titel')
 }
 
 function blockTyp(el: HTMLElement): BlockTyp {
@@ -190,9 +187,10 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
     const letzte = neu[neu.length - 1]
     const naechster = p.nextElementSibling
     if (letzte.tagName === 'FIGURE' && !letzte.querySelector('figcaption') && naechster?.tagName === 'P') {
-      const inhalt = [...naechster.childNodes].filter((n) => n.textContent?.trim())
-      if (inhalt.length === 1 && inhalt[0].nodeName === 'EM') {
-        beschriften(letzte, inhalt[0])
+      // Nur wenn der Absatz aus nichts als der kursiven Zeile besteht – sonst gingen Bilder darin verloren
+      const inhalt = [...naechster.childNodes]
+      if (nurKursiv(inhalt)) {
+        beschriften(letzte, sichtbar(inhalt)[0])
         naechster.remove()
       }
     }

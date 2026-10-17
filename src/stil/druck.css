@@ -78,7 +78,7 @@ body,
 /*
  * Zusammenhalten, was zusammengehört. Unterabschnitt (####) und Abschnitt (###) möglichst am Stück;
  * ist eine Einheit größer als eine Seite, teilt Paged.js sie trotzdem.
- * (Die Leerraum-Regel der Export-Anweisung braucht Messen und folgt in Meilenstein 3.)
+ * Halb leere Seiten erkennt vorschau/leerraum.ts (misst im umbrochenen iframe).
  */
 section.unterabschnitt,
 section.abschnitt,
@@ -150,7 +150,8 @@ section.unterabschnitt.teilbar,
   font-size: 9pt;
   margin-top: 0.3em;
 }
-.markdown-rendered .bild-fehlt {
+.markdown-rendered .bild-fehlt,
+.markdown-rendered .formel-fehlt {
   display: inline-block;
   border: 1.5px dashed rgb(var(--color-red-rgb));
   color: rgb(var(--color-red-rgb));
