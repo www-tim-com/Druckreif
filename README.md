@@ -8,8 +8,9 @@ Läuft lokal im Browser (Chrome/Edge), ohne Server im Internet; die Notizen werd
 
 | Was | Wie |
 | --- | --- |
-| Editor (Windows) | `start.bat` doppelklicken – installiert beim ersten Mal die Pakete und öffnet `http://localhost:5173` |
-| Editor (Konsole) | `npm install`, dann `npm run dev` |
+| Editor (Windows) | `start.bat` doppelklicken – installiert beim ersten Mal die Pakete, baut den Editor und öffnet `http://localhost:5173` |
+| Editor (Konsole) | `npm install`, dann `npm start` (fertig gebaut, schnell) |
+| Am Code arbeiten | `npm run dev` – Entwicklungsmodus mit sofortigem Neuladen, aber spürbar langsamer |
 | Demo ohne eigenen Vault | im Editor „Demo-Vault ansehen“ oder `http://localhost:5173/?demo` |
 | Demo-Version bauen | `npm run demo` – baut nach `dist/` und öffnet die Demo |
 | Typen prüfen | `npm run check` |
@@ -17,7 +18,8 @@ Läuft lokal im Browser (Chrome/Edge), ohne Server im Internet; die Notizen werd
 Voraussetzung: [Node.js](https://nodejs.org) ab Version 20.
 
 Ordnerzugriff geht nur in Chrome/Edge und nur über `localhost`, nicht per Doppelklick auf eine HTML-Datei.
-Die Freigabe wird pro Adresse gemerkt, deshalb ist der Port fest auf 5173 eingestellt.
+Die Freigabe wird pro Adresse gemerkt, deshalb laufen `npm start` und `npm run dev` beide auf Port 5173
+(nicht beide gleichzeitig).
 
 **Zum Testen immer eine Kopie des Vaults öffnen**, solange der Editor neu ist. Geschrieben wird nur in `.lernzettel/`.
 

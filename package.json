@@ -6,6 +6,7 @@
   "description": "Lernzettel-Editor: Obsidian-Notizen als druckfertige A4-Seiten",
   "scripts": {
     "dev": "vite",
+    "start": "vite build && vite preview --port 5173 --open",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "demo": "vite build && vite preview --open \"/?demo\"",
