@@ -428,7 +428,8 @@ export function App() {
     const bekannt = new Map(dokument.quellen)
     let laeuft = false
     const timer = setInterval(async () => {
-      if (laeuft) return
+      // Fenster minimiert oder anderer Tab: nicht auf die Platte zugreifen, die nächste Runde danach holt es nach
+      if (laeuft || document.hidden) return
       laeuft = true
       try {
         const pfade = [...bekannt.keys()]
@@ -714,14 +715,30 @@ export function App() {
     }
   }
 
+  // Block-ID -> Index des ersten passenden Layout-Eintrags, je Notiz und Layout-Stand einmal zugeordnet:
+  // blockSuchen läuft bei jedem Zeichnen oft (Gliederung: für jede Überschrift)
+  const eintragIndexe = useRef(new WeakMap<NotizTeil, { layout: LayoutDatei; ids: Map<string, number> }>())
+
+  function eintragIndex(teil: NotizTeil): Map<string, number> {
+    const layout = layoutVon(teil)
+    const alt = eintragIndexe.current.get(teil)
+    if (alt?.layout === layout) return alt.ids
+    const ids = new Map<string, number>()
+    layout.items.forEach((e, i) => {
+      const id = blockFinden(e.anchor, teil.bloecke)?.block.id
+      if (id !== undefined && !ids.has(id)) ids.set(id, i)
+    })
+    eintragIndexe.current.set(teil, { layout, ids })
+    return ids
+  }
+
   /** Block per ID finden, mit seiner Notiz und dem aktuellen Layout-Eintrag. */
   function blockSuchen(id: string | null): { teil: NotizTeil; block: Block; index: number | undefined } | null {
     if (!id || !dokument) return null
     for (const teil of dokument.notizen) {
       const block = teil.bloecke.find((b) => b.id === id)
       if (!block) continue
-      const index = layoutVon(teil).items.findIndex((e) => blockFinden(e.anchor, teil.bloecke)?.block.id === id)
-      return { teil, block, index: index < 0 ? undefined : index }
+      return { teil, block, index: eintragIndex(teil).get(id) }
     }
     return null
   }

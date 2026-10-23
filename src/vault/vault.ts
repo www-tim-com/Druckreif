@@ -46,6 +46,26 @@ export function istVersteckt(pfad: string): boolean {
   return pfad.split('/').some((teil) => teil.startsWith('.'))
 }
 
+// Sichtbare Dateien nach Dateiname (klein geschrieben). Jede Layout-Änderung baut alles neu auf und sucht dabei jedes
+// Bild – ohne Index jedes Mal ein Durchlauf über den ganzen Vault. `dateien` wird bei Änderungen ersetzt, nie verändert.
+const namensIndexe = new WeakMap<string[], Map<string, string[]>>()
+
+function namensIndex(dateien: string[]): Map<string, string[]> {
+  let index = namensIndexe.get(dateien)
+  if (!index) {
+    index = new Map()
+    for (const p of dateien) {
+      if (istVersteckt(p)) continue
+      const name = dateiname(p).toLowerCase()
+      const liste = index.get(name)
+      if (liste) liste.push(p)
+      else index.set(name, [p])
+    }
+    namensIndexe.set(dateien, index)
+  }
+  return index
+}
+
 /**
  * Sucht eine Datei wie Obsidian per Name im ganzen Vault, ohne auf Groß-/Kleinschreibung zu achten
  * (genaue Schreibweise gewinnt). Bei mehreren Treffern: zuerst der Ordner der Notiz, dann der Anhang-Ordner.
@@ -67,9 +87,9 @@ export function dateiFinden(
     }
   }
   const gesuchterName = dateiname(gesucht)
-  const kandidaten = vault.dateien.filter((p) => !istVersteckt(p))
+  const kandidaten = namensIndex(vault.dateien).get(gesuchterName.toLowerCase()) ?? []
   const genau = kandidaten.filter((p) => dateiname(p) === gesuchterName)
-  const treffer = genau.length > 0 ? genau : kandidaten.filter((p) => dateiname(p).toLowerCase() === gesuchterName.toLowerCase())
+  const treffer = genau.length > 0 ? genau : kandidaten
   if (treffer.length <= 1) return treffer[0] ?? null
   const imOrdner = treffer.filter((p) => ordner(p) === notizOrdner)
   if (imOrdner.length === 1) return imOrdner[0]

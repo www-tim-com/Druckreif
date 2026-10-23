@@ -150,10 +150,22 @@ async function notizAufbauen(
   const einfuegen = new Set(Array.isArray(layout.settings.embeds) ? layout.settings.embeds : [])
 
   // Bilder und eingebettete Notizen vorab laden, weil markdown-it synchron arbeitet
-  const bildUrls = await bilderLaden(vault, text, pfad, einstellungen, quellen)
+  // gleichzeitig lesen; Hinweise der Einbettungen in der Reihenfolge der Notiz melden
+  const ziele = einbettungenFinden(text).map((ziel, i) => ({ ziel, i })).filter(({ ziel }) => einfuegen.has(ziel))
+  const [bildUrls, inhalte] = await Promise.all([
+    bilderLaden(vault, text, pfad, einstellungen, quellen),
+    Promise.all(
+      ziele.map(async ({ ziel, i }) => {
+        const eigene: [Stufe, string][] = []
+        const html = await einbettungAufbauen(vault, ziel, pfad, `${praefix}-e${i}`, einstellungen, quellen, (stufe, t) => eigene.push([stufe, t]))
+        return { html, eigene }
+      }),
+    ),
+  ])
   const einbettungen = new Map<string, string | null>()
-  for (const [i, ziel] of einbettungenFinden(text).entries()) {
-    if (einfuegen.has(ziel)) einbettungen.set(ziel, await einbettungAufbauen(vault, ziel, pfad, `${praefix}-e${i}`, einstellungen, quellen, hinweis))
+  for (const [j, { ziel }] of ziele.entries()) {
+    einbettungen.set(ziel, inhalte[j].html)
+    for (const [stufe, t] of inhalte[j].eigene) hinweis(stufe, t)
   }
 
   const html = markdownUmwandeln(
