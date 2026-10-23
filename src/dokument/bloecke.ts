@@ -60,6 +60,7 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
   const bloecke: Block[] = []
   const pfad: string[] = [titel]
   const zaehler = new Map<string, number>()
+  const elemente: HTMLElement[] = [] // zu bloecke[i]
 
   for (const el of [...wurzel.children] as HTMLElement[]) {
     const ebene = /^H([1-6])$/.exec(el.tagName) ? Number(el.tagName[1]) : 0
@@ -94,22 +95,21 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     const id = `${praefix}-${bloecke.length}`
     el.setAttribute('data-block', id)
     bloecke.push({ id, pfad: blockPfad, typ, index, hash: bildname ?? pruefsumme(text), bild: bildname, text })
+    elemente.push(el)
   }
   // Eingerückte Bilder und Tabellen (in Listen, Callouts, Zitaten) sind eigene Blöcke im Block darum: Größe,
-  // Ausrichtung, Textumbruch wie oben. Erst nach allen anderen gezählt und angehängt, damit die Anker der
-  // bisherigen Blöcke (index) gleich bleiben und blockFinden bei gleichem Index die nicht eingerückten zuerst findet.
-  for (const aussen of bloecke.slice()) {
+  // Ausrichtung, Textumbruch wie oben. Eigene Zählung (Anker mit nested), damit sich die Indizes der eingerückten
+  // und der übrigen Blöcke nicht gegenseitig verschieben; angehängt, damit die übrigen IDs gleich bleiben.
+  for (const [i, aussen] of [...bloecke.entries()]) {
     if (aussen.typ === 'image' || aussen.typ === 'table' || aussen.typ === 'heading') continue
-    const el = wurzel.querySelector<HTMLElement>(`[data-block="${aussen.id}"]`)
-    // Eingefügte Notizen bleiben ein Block am Stück
-    if (!el || el.classList.contains('einbettung-inhalt')) continue
+    const el = elemente[i]
     for (const innen of el.querySelectorAll<HTMLElement>('figure.bild-block, table')) {
-      // Bilder in Tabellenzellen bleiben Teil der Tabelle
-      if (innen.parentElement?.closest('td, th')) continue
+      // Bilder in Tabellenzellen bleiben Teil der Tabelle; eingefügte Notizen bleiben ein Block am Stück
+      if (innen.parentElement?.closest('td, th') || innen.closest('.einbettung-inhalt')) continue
       const typ: BlockTyp = innen.tagName === 'TABLE' ? 'table' : 'image'
       const bildname = typ === 'image' ? innen.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined
       const text = normalisieren(innen.textContent ?? '')
-      const schluessel = aussen.pfad.join('>') + '|' + typ
+      const schluessel = aussen.pfad.join('>') + '|' + typ + '|eingerueckt'
       const index = zaehler.get(schluessel) ?? 0
       zaehler.set(schluessel, index + 1)
       const id = `${praefix}-${bloecke.length}`
@@ -174,7 +174,7 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
    * Inhalt in Zeilen (getrennt durch <br>) zerlegen und Bildzeilen zu figures machen. `absatz`: Textzeilen kommen
    * in neue <p> (Absatz), sonst bleiben sie lose stehen (Text direkt im Listenpunkt). null: keine Bildzeile.
    */
-  function zerlegen(knoten: Node[], absatz: boolean): HTMLElement[] | Node[] | null {
+  function zerlegen(knoten: Node[], absatz: boolean): Node[] | null {
     const zeilen: Node[][] = [[]]
     for (const n of knoten) {
       if (n.nodeName === 'BR') zeilen.push([])
@@ -200,7 +200,7 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
       text = []
     }
     for (const zeile of zeilen) {
-      const vorher = neu[neu.length - 1] as HTMLElement | undefined
+      const vorher = neu[neu.length - 1]
       if (nurBilder(zeile)) {
         textAbschliessen()
         for (const img of sichtbar(zeile)) {
@@ -209,7 +209,7 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
           figure.append(img)
           neu.push(figure)
         }
-      } else if (nurKursiv(zeile) && text.length === 0 && vorher?.nodeName === 'FIGURE' && !vorher.querySelector('figcaption')) {
+      } else if (nurKursiv(zeile) && text.length === 0 && vorher instanceof HTMLElement && vorher.tagName === 'FIGURE' && !vorher.querySelector('figcaption')) {
         beschriften(vorher, sichtbar(zeile)[0])
       } else {
         text.push(zeile)
@@ -223,11 +223,11 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
   for (const p of [...absaetze]) {
     // schon Beschriftung des vorigen Bildes; Tabellenzellen und eingefügte Notizen bleiben unverändert
     if (!p.parentElement || p.closest('td, th, .einbettung-inhalt')) continue
-    const neu = zerlegen([...p.childNodes], true) as HTMLElement[] | null
+    const neu = zerlegen([...p.childNodes], true)
     if (!neu) continue
     const letzte = neu[neu.length - 1]
     const naechster = p.nextElementSibling
-    if (letzte.tagName === 'FIGURE' && !letzte.querySelector('figcaption') && naechster?.tagName === 'P') {
+    if (letzte instanceof HTMLElement && letzte.tagName === 'FIGURE' && !letzte.querySelector('figcaption') && naechster?.tagName === 'P') {
       // Nur wenn der Absatz aus nichts als der kursiven Zeile besteht – sonst gingen Bilder darin verloren
       const inhalt = [...naechster.childNodes]
       if (nurKursiv(inhalt)) {
@@ -246,9 +246,11 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
       if (n.nodeType === Node.ELEMENT_NODE && /^(P|UL|OL|TABLE|BLOCKQUOTE|DIV|PRE|FIGURE|SECTION)$/.test(n.nodeName)) break
       lose.push(n)
     }
+    if (lose.length === 0) continue
+    // vor dem Zerlegen merken: zerlegen verschiebt Bilder in neue figures
+    const danach = lose[lose.length - 1].nextSibling
     const neu = zerlegen(lose, false)
     if (!neu) continue
-    const danach = lose[lose.length - 1].nextSibling
     for (const n of lose) if (n.parentNode === li) li.removeChild(n)
     for (const n of neu) li.insertBefore(n, danach)
   }

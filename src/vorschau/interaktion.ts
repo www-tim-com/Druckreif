@@ -126,6 +126,11 @@ function blockVon(el: Element): HTMLElement | null {
   return el.closest<HTMLElement>('[data-block]')
 }
 
+/** Eingerücktes Bild bzw. eingerückte Tabelle: Block innerhalb eines anderen Blocks (Liste, Callout, Zitat) */
+function eingerueckt(block: HTMLElement): boolean {
+  return !!block.parentElement?.closest('[data-block]')
+}
+
 /** Markiert den gewählten Block; bei Bildern mit Rahmen und Ziehpunkten an den Ecken. */
 export function auswahlZeigen(dok: Document, id: string | null): void {
   for (const el of dok.querySelectorAll('.druckreif-auswahl')) el.classList.remove('druckreif-auswahl')
@@ -315,8 +320,7 @@ function verschieben(dok: Document, figure: HTMLElement, start: PointerEvent, ru
     if (figure.classList.contains('umfliessen')) {
       // Umfließend: linke oder rechte Hälfte, verankert am Block unter der neuen Oberkante; Text fließt neu herum.
       // Eingerückt (in Liste, Callout, Zitat): bleibt in seinem Block, nur Seite und Abstand ändern sich
-      const eingerueckt = !!figure.parentElement?.closest('[data-block]')
-      const bezug = eingerueckt ? null : bezugFinden(dok, id, img.top + dyMm * faktor)
+      const bezug = eingerueckt(figure) ? null : bezugFinden(dok, id, img.top + dyMm * faktor)
       const ausrichtung: Ausrichtung = anteil < 1 / 2 ? 'left' : 'right'
       rueckrufe().bildVerschieben(id, ausrichtung, Math.round(dyMm), bezug ? { block: bezug.block, versatzMm: bezug.versatzPx / faktor } : undefined)
       return
@@ -335,7 +339,7 @@ function bezugFinden(dok: Document, bildId: string, y: number): { block: string;
   let bester: HTMLElement | null = null
   let besteOben = -Infinity
   for (const el of dok.querySelectorAll<HTMLElement>('.pagedjs_page_content [data-block]')) {
-    if (el.dataset.block === bildId || el.parentElement?.closest('[data-block]')) continue
+    if (el.dataset.block === bildId || eingerueckt(el)) continue
     const oben = el.getBoundingClientRect().top
     if (oben <= y && oben >= besteOben) [bester, besteOben] = [el, oben]
   }

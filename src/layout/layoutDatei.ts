@@ -25,6 +25,8 @@ export interface Anker {
   image?: string // bei Bildern statt hash
   /** Prüfsummen der ersten Wörter (je 4 Hex-Zeichen) – erlaubt die 70-%-Ähnlichkeit, ohne Text zu speichern */
   words?: string
+  /** Erweiterung: eingerücktes Bild bzw. eingerückte Tabelle (in Liste, Callout, Zitat) – eigene Zählung für index */
+  nested?: boolean
 }
 
 export interface BildLayout {

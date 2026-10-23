@@ -15,9 +15,12 @@ import type { Anker, BlockTyp, LayoutDatei, LayoutEintrag } from './layoutDatei'
 const MAX_WOERTER = 64
 
 export function ankerVon(block: Block): Anker {
-  return block.typ === 'image'
-    ? { path: block.pfad, type: 'image', image: block.bild, index: block.index }
-    : { path: block.pfad, type: block.typ, index: block.index, hash: block.hash, words: wortPruefsummen(block.text) }
+  const anker: Anker =
+    block.typ === 'image'
+      ? { path: block.pfad, type: 'image', image: block.bild, index: block.index }
+      : { path: block.pfad, type: block.typ, index: block.index, hash: block.hash, words: wortPruefsummen(block.text) }
+  if (block.eingerueckt) anker.nested = true
+  return anker
 }
 
 function wortPruefsummen(text: string): string {
@@ -31,7 +34,10 @@ function wortPruefsummen(text: string): string {
 }
 
 /** Sucht den Block zu einem Anker. Liefert Block und ob die Zuordnung sicher ist. */
-export function blockFinden(anker: Anker, bloecke: Block[]): { block: Block; sicher: boolean } | null {
+export function blockFinden(anker: Anker, alleBloecke: Block[]): { block: Block; sicher: boolean } | null {
+  // Eingerückte und übrige Blöcke werden getrennt gezählt: nur unter den gleichartigen suchen (ältere Anker
+  // kennen nur die nicht eingerückten)
+  const bloecke = alleBloecke.filter((b) => !!b.eingerueckt === !!anker.nested)
   if (anker.type === 'image') {
     const gleicheBilder = bloecke.filter((b) => b.typ === 'image' && b.bild === anker.image)
     const imPfad = gleicheBilder.filter((b) => gleicherPfad(b.pfad, anker.path))
@@ -122,7 +128,7 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
       const lage = el.tagName === 'TABLE' ? eintrag.table : eintrag.image
       if (lage?.wrap) {
         // Eingerückt: der Listenpunkt (das Callout, Zitat) umschließt das schwebende Objekt
-        if (el.parentElement?.closest('[data-block]')) el.parentElement.classList.add('umfluss-huelle')
+        if (treffer.block.eingerueckt) el.parentElement?.classList.add('umfluss-huelle')
         const melden = (text: string) => hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `${text}: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung', block })
         if (lage.before) bildVersetzen(wurzel, el, lage.before, bloecke, melden)
         if (lage.offsetYMm && lage.offsetYMm > 0) umflussAbstand(el, lage.offsetYMm)

@@ -74,6 +74,12 @@ Eine Formel, die KaTeX nicht kennt, wird nie als Rohcode gedruckt: $\ce{CO2}$
 	1. Tiefer eingerückt mit Bild
 		![[Lunge.png|90]]
 
+- Punkt mit Bild direkt vor einer Unterliste
+	![[Lunge.png|60]]
+	- Unterpunkt bleibt unter dem Bild
+- Eingefügte Notiz im Punkt (bleibt ein Block am Stück):
+	![[Atmung#Normwerte]]
+
 > [!note] Bild und Tabelle im Callout
 > ![[Atemwege.svg|100]]
 >

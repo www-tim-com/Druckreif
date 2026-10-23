@@ -1018,7 +1018,7 @@ export function App() {
             confirm(`Alle manuellen Änderungen in „${aktuelleNotiz.titel}“ verwerfen? (Rückgängig ist möglich)`) &&
             layoutAendern(aktuelleNotiz.pfad, layoutZuruecksetzen)
           }
-          block={gewaehlt ? { typ: gewaehlt.block.typ, beschreibung: gewaehlt.beschreibung, eintrag: gewaehlt.eintrag } : null}
+          block={gewaehlt ? { typ: gewaehlt.block.typ, beschreibung: gewaehlt.beschreibung, eintrag: gewaehlt.eintrag, eingerueckt: !!gewaehlt.block.eingerueckt } : null}
           blockAendern={(aendern) => blockAendern(auswahl, aendern)}
           bildIstMm={bildIstMm}
           zoom={zoom}

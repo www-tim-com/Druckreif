@@ -91,6 +91,15 @@ interface GewaehlterBlock {
   typ: BlockTyp
   beschreibung: string // z. B. "Absatz in „Atemmechanik“"
   eintrag: LayoutEintrag | undefined
+  /** Bild bzw. Tabelle in einer Liste, einem Callout oder Zitat: bleibt beim Ziehen in diesem Block */
+  eingerueckt: boolean
+}
+
+/** Was Ziehen mit einem Bild bzw. einer Tabelle tut – eingerückt bleibt es in seinem Block */
+function ziehenTipp(was: 'Bild' | 'Tabelle', eingerueckt: boolean | undefined): string {
+  return eingerueckt
+    ? `Eingerückt (in Liste, Callout oder Zitat): ${was === 'Bild' ? 'das Bild bleibt' : 'die Tabelle bleibt'} in diesem Block. Ziehen wählt links oder rechts und schiebt ${was === 'Bild' ? 'es' : 'sie'} tiefer, an einen anderen Absatz kommt ${was === 'Bild' ? 'es' : 'sie'} nicht.`
+    : `${was} in den Text ziehen, um ${was === 'Bild' ? 'es' : 'sie'} an einen anderen Absatz zu setzen`
 }
 
 interface BandProps {
@@ -621,7 +630,7 @@ function BildReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Textumbruch">
         <GrosserKnopf symbol={Image} text="Eigene Zeile" aktiv={!umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(false))} tipp="Bild steht als eigener Block an seiner Stelle in der Notiz, Text darunter" />
-        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true))} tipp="Wie in Word: Bild steht links oder rechts, der Text des Abschnitts fließt herum. Bild in den Text ziehen, um es an einen anderen Absatz zu setzen" />
+        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true))} tipp={`Wie in Word: Bild steht links oder rechts, der Text fließt herum. ${ziehenTipp('Bild', p.block?.eingerueckt)}`} />
         <div className="spalte">
           <Zahlfeld beschriftung="Abstand zum Text" wert={bild?.wrapGapMm} platzhalter="4" start={4} einheit="mm" schritt={1} min={0} max={20} gesperrt={!umfliessen} onWert={(mm) => setzen({ wrapGapMm: mm })} />
           <KleinerKnopf symbol={Undo2} text="An ursprüngliche Stelle" gesperrt={!bild?.before && !bild?.offsetYMm} onClick={() => setzen({ before: undefined, offsetYMm: undefined })} />
@@ -630,7 +639,7 @@ function BildReiter(p: BandProps) {
       <Gruppe titel="Position">
         <div className="spalte">
           <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={bild?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : MIN_BILDVERSATZ_MM} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
-          <span className="band-info" title="Bild auf der Seite ziehen verschiebt es, die Ecken ändern die Größe">Ziehen: verschieben · Ecke: Größe</span>
+          <span className="band-info" title={ziehenTipp('Bild', p.block?.eingerueckt)}>{p.block?.eingerueckt ? 'Ziehen: Seite, tiefer' : 'Ziehen: verschieben'} · Ecke: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Zurücksetzen">
@@ -664,7 +673,7 @@ function TabellenReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Textumbruch">
         <GrosserKnopf symbol={Table} text="Eigene Zeile" aktiv={!umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(false, 'table'))} tipp="Tabelle steht als eigener Block an ihrer Stelle in der Notiz, Text darunter" />
-        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true, 'table'))} tipp="Wie beim Bild: Tabelle steht links oder rechts, der Text des Abschnitts fließt herum. Tabelle ziehen, um sie an einen anderen Absatz zu setzen" />
+        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true, 'table'))} tipp={`Wie beim Bild: Tabelle steht links oder rechts, der Text fließt herum. ${ziehenTipp('Tabelle', p.block?.eingerueckt)}`} />
         <div className="spalte">
           <Zahlfeld beschriftung="Abstand zum Text" wert={t?.wrapGapMm} platzhalter="4" start={4} einheit="mm" schritt={1} min={0} max={20} gesperrt={!umfliessen} onWert={(mm) => setzen({ wrapGapMm: mm })} />
           <KleinerKnopf symbol={Undo2} text="An ursprüngliche Stelle" gesperrt={!t?.before && !t?.offsetYMm} onClick={() => setzen({ before: undefined, offsetYMm: undefined })} />
@@ -673,7 +682,7 @@ function TabellenReiter(p: BandProps) {
       <Gruppe titel="Position">
         <div className="spalte">
           <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={t?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : MIN_BILDVERSATZ_MM} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
-          <span className="band-info" title="Gewählte Tabelle auf der Seite ziehen verschiebt sie">Ziehen: verschieben</span>
+          <span className="band-info" title={ziehenTipp('Tabelle', p.block?.eingerueckt)}>{p.block?.eingerueckt ? 'Ziehen: Seite, tiefer' : 'Ziehen: verschieben'}</span>
         </div>
       </Gruppe>
       <Gruppe titel="Spalten">

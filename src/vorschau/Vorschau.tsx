@@ -220,13 +220,21 @@ export function Vorschau(p: Props) {
       return nummer ? Number(nummer) : null
     },
     bloeckeAufSeite(nummer) {
-      const seiten = aktivesFenster()?.contentDocument?.querySelectorAll('.pagedjs_page')
-      const bloecke = [...(seiten?.[nummer - 1]?.querySelectorAll<HTMLElement>('[data-block]:not([data-split-from])') ?? [])]
+      const dok = aktivesFenster()?.contentDocument
+      const seiten = dok?.querySelectorAll('.pagedjs_page')
+      // Eingerückte Bilder und Tabellen gehören zu ihrem Block darum (Liste, Callout), nicht zur Seite, auf der sie stehen
+      const aussen = (el: HTMLElement) => !el.parentElement?.closest('[data-block]')
+      const bloecke = [...(seiten?.[nummer - 1]?.querySelectorAll<HTMLElement>('[data-block]:not([data-split-from])') ?? [])].filter(aussen)
       // Ein manueller Umbruch vor dem ersten Block der nächsten Seite beendet diese Seite – gehört also auch zu ihr
       const naechster = seiten?.[nummer]?.querySelector<HTMLElement>('[data-block]:not([data-split-from])')
       const umbruch = naechster?.closest<HTMLElement>('.umbruch-vor')
       if (naechster && umbruch && (umbruch === naechster || umbruch.querySelector('[data-block]') === naechster)) bloecke.push(naechster)
-      return bloecke.map((el) => el.dataset.block!)
+      const ids = new Set(bloecke.map((el) => el.dataset.block!))
+      // samt der eingerückten darin, auch auf den Folgeseiten eines geteilten Blocks
+      for (const id of [...ids]) {
+        for (const innen of dok?.querySelectorAll<HTMLElement>(`[data-block="${id}"] [data-block]`) ?? []) ids.add(innen.dataset.block!)
+      }
+      return [...ids]
     },
     miniaturHtml() {
       const dok = aktivesFenster()?.contentDocument
