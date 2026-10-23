@@ -48,6 +48,11 @@ export interface TabellenLayout {
   fontSizePt?: number
   compact?: boolean // engere Zeilen
   split?: boolean // darf über Seiten laufen (sonst am Stück)
+  /** Erweiterung: Textumbruch und Position wie bei Bildern (siehe BildLayout) */
+  wrap?: boolean
+  offsetYMm?: number
+  wrapGapMm?: number
+  before?: Anker
 }
 
 export interface LayoutEintrag {

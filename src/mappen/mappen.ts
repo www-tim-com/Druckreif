@@ -18,6 +18,11 @@ export interface Mappe {
   items: MappenEintrag[]
   /** Tinte sparen: Callouts und Tabellenköpfe ohne farbige Flächen */
   inkSaving?: boolean
+  /**
+   * Suchen und Ausblenden: Abschnitte, deren Überschrift einen dieser Begriffe enthält (Groß/Klein egal), werden in
+   * allen Notizen der Mappe ausgeblendet – auch in später hinzugefügten. Einzelne hebt hidden: false im Layout auf.
+   */
+  hideSections?: string[]
 }
 
 export interface MappenDatei {
@@ -81,6 +86,21 @@ export const tinteSparenSetzen = (an: boolean) => (m: Mappe): Mappe => {
 /** Layout-Einstellungen der Mappe auf automatisch: jede Notiz auf neuer Seite, Tinte sparen aus. Auszüge bleiben. */
 export const mappeZuruecksetzen = (m: Mappe): Mappe =>
   tinteSparenSetzen(false)({ ...m, items: m.items.map(({ newPage: _n, ...e }) => e) })
+
+/** Begriff, durch den eine Ausblende-Regel diese Überschrift trifft (null: keine) */
+export function ausblendRegel(regeln: string[] | undefined, ueberschrift: string): string | null {
+  const titel = ueberschrift.toLocaleLowerCase('de')
+  return regeln?.find((r) => r.trim() && titel.includes(r.trim().toLocaleLowerCase('de'))) ?? null
+}
+
+/** Ausblende-Regel hinzufügen (an) oder entfernen */
+export const ausblendRegelSetzen = (begriff: string, an: boolean) => (m: Mappe): Mappe => {
+  const gleich = (r: string) => r.toLocaleLowerCase('de') === begriff.trim().toLocaleLowerCase('de')
+  const rest = (m.hideSections ?? []).filter((r) => !gleich(r))
+  const regeln = an && begriff.trim() ? [...rest, begriff.trim()] : rest
+  const { hideSections: _alt, ...ohne } = m
+  return regeln.length ? { ...ohne, hideSections: regeln } : ohne
+}
 
 export const notizAnhaengen = (note: string) => (m: Mappe): Mappe => ({ ...m, items: [...m.items, { note }] })
 

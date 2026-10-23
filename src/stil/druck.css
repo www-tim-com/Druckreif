@@ -194,17 +194,40 @@ figure.umfliessen.nach-abstand[data-ausrichtung='left'] { clear: left; }
 figure.umfliessen img { max-width: 100%; }
 /* Beschriftung so breit wie das Bild (bricht um, statt das Bild breiter zu machen) */
 figure.umfliessen figcaption { width: 0; min-width: 100%; }
+/* Tabellen mit Textumbruch: genauso wie Bilder (Breite aus der Layout-Datei, nie über Seiten geteilt) */
+.markdown-rendered table.umfliessen {
+  float: right;
+  margin: 0 0 var(--umfluss-abstand, 4mm) var(--umfluss-abstand, 4mm);
+  break-inside: avoid;
+}
+.markdown-rendered table.umfliessen[data-ausrichtung='left'] {
+  float: left;
+  margin: 0 var(--umfluss-abstand, 4mm) var(--umfluss-abstand, 4mm) 0;
+}
+.markdown-rendered table.umfliessen[data-ausrichtung='center'] {
+  float: none;
+  margin-inline: auto;
+}
+table.umfliessen.nach-abstand { clear: right; }
+table.umfliessen.nach-abstand[data-ausrichtung='left'] { clear: left; }
 /* Kästen und Listen neben dem Bild weichen aus, statt darunter zu liegen (Hintergrund, Rahmen, Aufzählungszeichen) */
 figure.umfliessen ~ .callout,
 figure.umfliessen ~ pre,
 figure.umfliessen ~ blockquote,
 figure.umfliessen ~ .mermaid-diagramm,
-figure.umfliessen ~ hr {
+figure.umfliessen ~ hr,
+table.umfliessen ~ .callout,
+table.umfliessen ~ pre,
+table.umfliessen ~ blockquote,
+table.umfliessen ~ .mermaid-diagramm,
+table.umfliessen ~ hr {
   display: flow-root;
 }
 /* Aufzählungszeichen stehen links vor dem Text: neben einem linken Bild weicht die ganze Liste aus */
 figure.umfliessen[data-ausrichtung='left'] ~ ul,
-figure.umfliessen[data-ausrichtung='left'] ~ ol {
+figure.umfliessen[data-ausrichtung='left'] ~ ol,
+table.umfliessen[data-ausrichtung='left'] ~ ul,
+table.umfliessen[data-ausrichtung='left'] ~ ol {
   display: flow-root;
 }
 section::after { content: ''; display: block; clear: both; }

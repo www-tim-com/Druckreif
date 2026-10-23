@@ -57,10 +57,17 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
     } else if (ziel.closest('.druckreif-breitengriff')) {
       e.preventDefault()
       tabellenbreiteZiehen(dok, e, rueckrufe)
+    } else if (griff?.closest('.druckreif-ueberlagerung')) {
+      e.preventDefault()
+      tabelleSkalieren(dok, griff, e, rueckrufe)
     } else if (griff) {
       e.preventDefault()
       skalieren(dok, griff, e, rueckrufe)
     } else if (block?.tagName === 'FIGURE' && block.classList.contains('druckreif-auswahl') && ziel.tagName === 'IMG') {
+      e.preventDefault()
+      verschieben(dok, block, e, rueckrufe)
+    } else if (block?.tagName === 'TABLE' && block.classList.contains('druckreif-auswahl')) {
+      // Gewählte Tabelle wie ein Bild ziehen (nur der erste Teil einer über Seiten geteilten Tabelle trägt die Lage)
       e.preventDefault()
       verschieben(dok, block, e, rueckrufe)
     }
@@ -162,6 +169,13 @@ function tabellenGriffe(tabelle: HTMLTableElement) {
   breite.className = 'druckreif-breitengriff'
   breite.title = 'Tabellenbreite ziehen'
   ebene.append(breite)
+  // Ecken wie beim Bild: ziehen ändert die Breite
+  for (const ecke of ['nw', 'ne', 'sw', 'se']) {
+    const griff = dok.createElement('span')
+    griff.className = `druckreif-griff ${ecke}`
+    griff.dataset.ecke = ecke
+    ebene.append(griff)
+  }
   dok.body.append(ebene)
 }
 
@@ -201,6 +215,24 @@ function tabellenbreiteZiehen(dok: Document, start: PointerEvent, rueckrufe: () 
 
   ziehen(dok, start, (dx) => {
     prozent = Math.round(Math.min(100, Math.max(20, ((startBreite + dx) / verfuegbar) * 100)))
+    tabelle.style.width = `${prozent}%`
+    tabellenGriffe(tabelle)
+  }, (bewegt) => {
+    if (bewegt) rueckrufe().tabelleBreite(tabelle.dataset.block!, prozent)
+  })
+}
+
+/** Tabelle an einer Ecke größer oder kleiner ziehen – wie ein Bild (gespeichert in % der Textbreite) */
+function tabelleSkalieren(dok: Document, griff: HTMLElement, start: PointerEvent, rueckrufe: () => Rueckrufe) {
+  const tabelle = tabelleZurEbene(dok)
+  if (!tabelle) return
+  const startBreite = tabelle.getBoundingClientRect().width
+  const verfuegbar = tabelle.parentElement?.getBoundingClientRect().width ?? startBreite
+  const richtung = griff.dataset.ecke?.endsWith('w') ? -1 : 1
+  let prozent = Math.round((startBreite / verfuegbar) * 100)
+
+  ziehen(dok, start, (dx) => {
+    prozent = Math.round(Math.min(100, Math.max(20, ((startBreite + richtung * dx) / verfuegbar) * 100)))
     tabelle.style.width = `${prozent}%`
     tabellenGriffe(tabelle)
   }, (bewegt) => {
@@ -257,9 +289,11 @@ function skalieren(dok: Document, griff: HTMLElement, start: PointerEvent, rueck
   })
 }
 
+/** Bild (figure) oder Tabelle ziehen: Ausrichtung, Abstand und beim Textumbruch der Bezugsblock */
 function verschieben(dok: Document, figure: HTMLElement, start: PointerEvent, rueckrufe: () => Rueckrufe) {
   const faktor = pxProMm(dok)
   const inhalt = figure.closest('.pagedjs_page_content') ?? dok.body
+  const ebene = dok.querySelector<HTMLElement>('.druckreif-ueberlagerung')
   let dxMm = 0
   let dyMm = 0
 
@@ -268,11 +302,13 @@ function verschieben(dok: Document, figure: HTMLElement, start: PointerEvent, ru
     dyMm = dy / faktor
     figure.style.transform = `translate(${dxMm}mm, ${dyMm}mm)`
     figure.style.opacity = '0.8'
+    if (ebene) ebene.style.visibility = 'hidden'
   }, (bewegt) => {
     figure.style.transform = ''
     figure.style.opacity = ''
+    if (ebene) ebene.style.visibility = ''
     if (!bewegt) return
-    const img = figure.querySelector('img')!.getBoundingClientRect()
+    const img = (figure.querySelector('img') ?? figure).getBoundingClientRect()
     const flaeche = inhalt.getBoundingClientRect()
     const anteil = (img.left + img.width / 2 + dxMm * faktor - flaeche.left) / flaeche.width
     const id = figure.dataset.block!

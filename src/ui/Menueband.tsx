@@ -41,6 +41,7 @@ import {
   Rows3,
   ScissorsLineDashed,
   Search,
+  SearchX,
   SeparatorHorizontal,
   Sparkles,
   Table,
@@ -157,6 +158,10 @@ interface BandProps {
   onWoerter(): void
   onTastenkuerzel(): void
   onOptionen(): void
+  /** Suchen und Ausblenden (null: kein Dokument) */
+  onAbschnitteAusblenden: (() => void) | null
+  /** Anzahl der Ausblende-Regeln der Mappe */
+  ausblendRegeln: number
 }
 
 export function Menueband(p: BandProps) {
@@ -386,12 +391,25 @@ function StartReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Bearbeiten">
         <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
+        <AusblendenKnopf {...p} />
       </Gruppe>
       <Gruppe titel="Ausgabe">
         <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen: geänderte Notizen, neue oder verschobene Bilder, Theme (F5)" onClick={p.aktualisieren} />
         <GrosserKnopf symbol={Printer} text="Drucken / PDF" tipp="Drucken oder als PDF speichern (Strg+P)" onClick={p.drucken} />
       </Gruppe>
     </>
+  )
+}
+
+function AusblendenKnopf(p: BandProps) {
+  return (
+    <GrosserKnopf
+      symbol={SearchX}
+      text={p.ausblendRegeln > 0 ? `Suchen und Ausblenden (${p.ausblendRegeln})` : 'Suchen und Ausblenden'}
+      gesperrt={!p.onAbschnitteAusblenden}
+      onClick={() => p.onAbschnitteAusblenden?.()}
+      tipp="Abschnitte nach ihrer Überschrift suchen (z. B. „Quellen“) und in allen Notizen der Mappe ausblenden – auch in später hinzugefügten"
+    />
   )
 }
 
@@ -515,6 +533,7 @@ function PruefenReiter(p: BandProps) {
       </Gruppe>
       <Gruppe titel="Suchen">
         <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
+        <AusblendenKnopf {...p} />
       </Gruppe>
       <Gruppe titel="Formatierung">
         <GrosserKnopf symbol={Pilcrow} text="Umbrüche zeigen" aktiv={p.zeichen} onClick={() => p.onZeichen(!p.zeichen)} tipp="Manuelle Seitenumbrüche auf den Seiten markieren" />
@@ -621,23 +640,40 @@ function BildReiter(p: BandProps) {
   )
 }
 
+/** Tabellen lassen sich wie Bilder anordnen: Größe, Ausrichtung, Textumbruch, Position – dazu Spalten und Schrift. */
 function TabellenReiter(p: BandProps) {
   const t = p.block?.eintrag?.table
   const setzen = (teil: Parameters<typeof tabelleSetzen>[0]) => p.blockAendern(tabelleSetzen(teil))
-  const ausrichtung = t?.align ?? 'left'
+  const umfliessen = !!t?.wrap
+  const ausrichtung = t?.align ?? (umfliessen ? 'right' : 'left')
   return (
     <>
       <Gruppe titel="Größe">
         <div className="spalte">
           <Zahlfeld beschriftung="Breite" wert={t?.widthPct} platzhalter="100" einheit="%" schritt={5} min={20} max={100} onWert={(w) => p.blockAendern(tabellenBreiteSetzen(w))} />
-          <span className="band-info">Rechten Rand oder Spaltengrenze ziehen</span>
+          <KleinerKnopf symbol={Table} text="Volle Breite" gesperrt={t?.widthPct === undefined} onClick={() => p.blockAendern(tabellenBreiteSetzen(undefined))} tipp="Tabelle wieder so breit wie der Text" />
+          <span className="band-info" title="Ecken oder rechten Rand der gewählten Tabelle ziehen">Ecke ziehen: Größe</span>
         </div>
       </Gruppe>
       <Gruppe titel="Ausrichtung">
         <div className="zeile">
-          <SymbolKnopf symbol={AlignLeft} text="Links" aktiv={ausrichtung === 'left'} onClick={() => setzen({ align: undefined })} />
-          <SymbolKnopf symbol={AlignCenter} text="Zentriert" aktiv={ausrichtung === 'center'} onClick={() => setzen({ align: 'center' })} />
+          <SymbolKnopf symbol={AlignLeft} text="Links" aktiv={ausrichtung === 'left'} onClick={() => setzen({ align: umfliessen ? 'left' : undefined })} />
+          <SymbolKnopf symbol={AlignCenter} text={umfliessen ? 'Zentriert (nur ohne Textumbruch)' : 'Zentriert'} aktiv={ausrichtung === 'center'} gesperrt={umfliessen} onClick={() => setzen({ align: 'center' })} />
           <SymbolKnopf symbol={AlignRight} text="Rechts" aktiv={ausrichtung === 'right'} onClick={() => setzen({ align: 'right' })} />
+        </div>
+      </Gruppe>
+      <Gruppe titel="Textumbruch">
+        <GrosserKnopf symbol={Table} text="Eigene Zeile" aktiv={!umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(false, 'table'))} tipp="Tabelle steht als eigener Block an ihrer Stelle in der Notiz, Text darunter" />
+        <GrosserKnopf symbol={WrapText} text="Text umfließt" aktiv={umfliessen} onClick={() => p.blockAendern(umfliessenSetzen(true, 'table'))} tipp="Wie beim Bild: Tabelle steht links oder rechts, der Text des Abschnitts fließt herum. Tabelle ziehen, um sie an einen anderen Absatz zu setzen" />
+        <div className="spalte">
+          <Zahlfeld beschriftung="Abstand zum Text" wert={t?.wrapGapMm} platzhalter="4" start={4} einheit="mm" schritt={1} min={0} max={20} gesperrt={!umfliessen} onWert={(mm) => setzen({ wrapGapMm: mm })} />
+          <KleinerKnopf symbol={Undo2} text="An ursprüngliche Stelle" gesperrt={!t?.before && !t?.offsetYMm} onClick={() => setzen({ before: undefined, offsetYMm: undefined })} />
+        </div>
+      </Gruppe>
+      <Gruppe titel="Position">
+        <div className="spalte">
+          <Zahlfeld beschriftung={umfliessen ? 'Tiefer im Absatz' : 'Abstand oben'} wert={t?.offsetYMm} platzhalter="0" einheit="mm" schritt={1} min={umfliessen ? 0 : MIN_BILDVERSATZ_MM} max={MAX_BILDVERSATZ_MM} onWert={(mm) => setzen({ offsetYMm: mm })} />
+          <span className="band-info" title="Gewählte Tabelle auf der Seite ziehen verschiebt sie">Ziehen: verschieben</span>
         </div>
       </Gruppe>
       <Gruppe titel="Spalten">
@@ -650,7 +686,8 @@ function TabellenReiter(p: BandProps) {
         </div>
       </Gruppe>
       <Gruppe titel="Seiten">
-        <GrosserKnopf symbol={ALargeSmall} text="Über Seiten teilen" aktiv={!!t?.split} onClick={() => setzen({ split: t?.split ? undefined : true })} tipp="Lange Tabelle darf auf der nächsten Seite weiterlaufen (sonst am Stück)" />
+        <GrosserKnopf symbol={ALargeSmall} text="Über Seiten teilen" aktiv={!!t?.split && !umfliessen} gesperrt={umfliessen} onClick={() => setzen({ split: t?.split ? undefined : true })}
+          tipp={umfliessen ? 'Mit Textumbruch bleibt die Tabelle am Stück' : 'Lange Tabelle darf auf der nächsten Seite weiterlaufen (sonst am Stück)'} />
       </Gruppe>
       <Gruppe titel="Zurücksetzen">
         <GrosserKnopf symbol={RotateCcw} text="Tabelle zurücksetzen" gesperrt={!t} onClick={() => p.blockAendern(tabelleZuruecksetzen)} />

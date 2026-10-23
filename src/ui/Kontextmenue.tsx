@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Ban, EyeOff, RotateCcw, SeparatorHorizontal, WrapText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { BlockTyp, LayoutEintrag } from '../layout/layoutDatei'
-import { ausblendenSetzen, bildSetzen, eintragZuruecksetzen, schriftSetzen, umbruchUmschalten, umfliessenSetzen } from '../layout/bearbeiten'
+import { ausblendenSetzen, eintragZuruecksetzen, objektSetzen, schriftSetzen, umbruchUmschalten, umfliessenSetzen } from '../layout/bearbeiten'
 import { zahlText } from './Band'
 import { quickinfo } from './QuickInfo'
 
@@ -48,7 +48,10 @@ export function Kontextmenue({ x, y, typ, eintrag: e, grundschriftPt, blockAende
       </button>
     )
   }
-  const bild = e?.image
+  // Bilder und Tabellen ordnet man gleich an
+  const art = typ === 'image' ? 'image' : typ === 'table' ? 'table' : null
+  const lage = art ? e?.[art] : undefined
+  const umfliesst = !!lage?.wrap
   const pt = e?.fontSizePt ?? grundschriftPt
   const schrift = (schritt: number) => {
     const neu = Math.min(SCHRIFT_MAX, Math.max(SCHRIFT_MIN, pt + schritt))
@@ -95,13 +98,13 @@ export function Kontextmenue({ x, y, typ, eintrag: e, grundschriftPt, blockAende
         {punkt(Ban, 'Umbruch davor verhindern', umbruchUmschalten(false), e?.pageBreakBefore === false)}
         <hr />
         {punkt(EyeOff, typ === 'heading' ? 'Abschnitt im Druck ausblenden' : 'Im Druck ausblenden', ausblendenSetzen(true))}
-        {typ === 'image' && (
+        {art && (
           <>
             <hr />
-            {punkt(AlignLeft, 'Links', bildSetzen({ align: 'left' }), bild?.align === 'left')}
-            {!bild?.wrap && punkt(AlignCenter, 'Zentriert', bildSetzen({ align: 'center' }), bild?.align === 'center')}
-            {punkt(AlignRight, 'Rechts', bildSetzen({ align: 'right' }), bild?.align === 'right' || (!!bild?.wrap && bild.align !== 'left'))}
-            {punkt(WrapText, 'Text umfließt Bild', umfliessenSetzen(!bild?.wrap), !!bild?.wrap)}
+            {punkt(AlignLeft, 'Links', objektSetzen(art, { align: 'left' }), lage?.align === 'left')}
+            {!umfliesst && punkt(AlignCenter, 'Zentriert', objektSetzen(art, { align: 'center' }), lage?.align === 'center')}
+            {punkt(AlignRight, 'Rechts', objektSetzen(art, { align: 'right' }), lage?.align === 'right' || (umfliesst && lage?.align !== 'left'))}
+            {punkt(WrapText, art === 'image' ? 'Text umfließt Bild' : 'Text umfließt Tabelle', umfliessenSetzen(!umfliesst, art), umfliesst)}
           </>
         )}
         <hr />

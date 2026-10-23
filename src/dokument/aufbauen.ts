@@ -52,6 +52,8 @@ export async function dokumentAufbauen(
   einstellungen: VaultEinstellungen,
   titel: string,
   ausstehend?: Map<string, LayoutDatei>,
+  /** Ausblende-Regeln der Mappe (Suchen und Ausblenden) */
+  regeln: string[] = [],
 ): Promise<Dokument> {
   const hinweise: Hinweis[] = []
   const quellen = new Map<string, number>()
@@ -89,7 +91,7 @@ export async function dokumentAufbauen(
   const gebaut = await Promise.all(
     teile.map(async (t, i) => {
       const eigene: Hinweis[] = []
-      return { ...(await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, eigene, quellen, ausstehend)), eigene }
+      return { ...(await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, eigene, quellen, ausstehend, regeln)), eigene }
     }),
   )
   const container = document.createElement('div')
@@ -129,7 +131,8 @@ async function notizAufbauen(
   einstellungen: VaultEinstellungen,
   hinweise: Hinweis[],
   quellen: Map<string, number>,
-  ausstehend?: Map<string, LayoutDatei>,
+  ausstehend: Map<string, LayoutDatei> | undefined,
+  regeln: string[],
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
   const name = notizName(pfad)
   const { daten, rest: text } = frontmatterLesen(await notizLesen(vault, pfad, quellen))
@@ -188,7 +191,7 @@ async function notizAufbauen(
 
   if (!layoutFehler) {
     try {
-      hinweise.push(...layoutAnwenden(article, layout, bloecke, pfad))
+      hinweise.push(...layoutAnwenden(article, layout, bloecke, pfad, regeln))
     } catch (fehler) {
       layoutFehler = `Layout-Datei ${layoutPfad(pfad)} ist ungültig (${(fehler as Error).message})`
     }

@@ -41,7 +41,8 @@
     outline: none;
     background: none;
   }
-  figure.druckreif-auswahl img {
+  figure.druckreif-auswahl img,
+  table.druckreif-auswahl {
     cursor: move;
   }
   .druckreif-rahmen {

@@ -4,10 +4,11 @@ import { type ReactNode, useEffect } from 'react'
 import { X } from 'lucide-react'
 import type { Statistik } from '../vorschau/Vorschau'
 
-function Dialog({ titel, children, onSchliessen }: { titel: string; children: ReactNode; onSchliessen(): void }) {
+export function Dialog({ titel, children, onSchliessen, breit }: { titel: string; children: ReactNode; onSchliessen(): void; breit?: boolean }) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' && e.key !== 'Enter') return
+      // Enter in einem Eingabefeld gehört dem Feld
+      if (e.key !== 'Escape' && (e.key !== 'Enter' || (e.target as Element | null)?.closest?.('input'))) return
       e.preventDefault()
       e.stopPropagation()
       onSchliessen()
@@ -18,7 +19,7 @@ function Dialog({ titel, children, onSchliessen }: { titel: string; children: Re
   }, [onSchliessen])
   return (
     <div className="dialog-hintergrund" onPointerDown={(e) => e.target === e.currentTarget && onSchliessen()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={titel}>
+      <div className={`dialog${breit ? ' breit' : ''}`} role="dialog" aria-modal="true" aria-label={titel}>
         <header>
           <span>{titel}</span>
           <button className="schliessen" onClick={onSchliessen} aria-label="Schließen">
@@ -27,7 +28,7 @@ function Dialog({ titel, children, onSchliessen }: { titel: string; children: Re
         </header>
         <div className="dialog-inhalt">{children}</div>
         <footer>
-          <button className="primaer" onClick={onSchliessen} autoFocus>
+          <button className="primaer" onClick={onSchliessen} autoFocus={!breit}>
             Schließen
           </button>
         </footer>

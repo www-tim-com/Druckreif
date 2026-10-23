@@ -11,6 +11,8 @@ interface Props {
   hinweise: Hinweis[]
   onSprung(blockId: string): void
   onEinblenden(notiz: string, index: number): void
+  /** durch eine Ausblende-Regel der Mappe ausgeblendet (kein Layout-Eintrag) */
+  onEinblendenBlock(blockId: string): void
   onZuweisen(notiz: string, index: number): void
   onLoeschen(notiz: string, index: number): void
   onEinbettung(notiz: string, ziel: string, einfuegen: boolean): void
@@ -58,6 +60,13 @@ export function Hinweise(p: Props) {
                 <div className="aktionen">
                   <button onClick={() => p.onLeerraum(leerraum)}>
                     <Wrench size={13} /> {knopf}
+                  </button>
+                </div>
+              )}
+              {eintrag === undefined && h.art === 'ausgeblendet' && h.block && (
+                <div className="aktionen">
+                  <button onClick={() => p.onEinblendenBlock(h.block!)}>
+                    <Eye size={13} /> Einblenden
                   </button>
                 </div>
               )}

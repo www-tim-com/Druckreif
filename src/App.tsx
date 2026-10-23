@@ -16,6 +16,8 @@ import {
   eintragZuweisen,
   layoutZuruecksetzen,
   notizSchriftSetzen,
+  type Objekt,
+  objektSetzen,
   schriftSetzen,
   bildVerschieben,
   tabelleSetzen,
@@ -31,6 +33,8 @@ import {
   type Mappe,
   type MappenDatei,
   type MappenEintrag,
+  ausblendRegel,
+  ausblendRegelSetzen,
   eintragEntfernen,
   eintragSetzen,
   eintragVerschieben,
@@ -68,6 +72,7 @@ import {
   RotateCcw,
   Ruler,
   Search,
+  SearchX,
   SeparatorHorizontal,
   Settings,
   Square,
@@ -75,6 +80,7 @@ import {
   Undo2,
   WandSparkles,
 } from 'lucide-react'
+import { AbschnitteAusblenden } from './ui/AbschnitteAusblenden'
 import { type Befehl, Befehlssuche } from './ui/Befehlssuche'
 import { type DateiSeite, Datei } from './ui/Datei'
 import { Tastenkombinationen, Wortanzahl } from './ui/Dialoge'
@@ -141,7 +147,7 @@ export function App() {
   const [oberflaeche, setOberflaeche, dunkel] = useOberflaeche()
   // Vollbildmodus: Titelleiste und Menüband kurz eingeblendet („…“ oder Alt)
   const [kopfOffen, setKopfOffen] = useState(false)
-  const [dialog, setDialog] = useState<'woerter' | 'tasten' | null>(null)
+  const [dialog, setDialog] = useState<'woerter' | 'tasten' | 'ausblenden' | null>(null)
   const [statistik, setStatistik] = useState<Statistik | null>(null)
   const [woerter, setWoerter] = useState<number | null>(null)
   const [zuletzt, setZuletzt] = useState<string[]>(() => listeLesen(speicherLesen('befehle')))
@@ -384,7 +390,7 @@ export function App() {
 
   // Dokument aufbauen bei Änderung der Mappe oder der Dateien. useLayoutEffect: sofort nach der Änderung starten,
   // nicht erst nach dem nächsten Bildschirm-Frame. Ein überholter Aufbau wird verworfen (abgebrochen).
-  const mappenSchluessel = aktiveMappe ? JSON.stringify([aktiveMappe.name, aktiveMappe.items]) : ''
+  const mappenSchluessel = aktiveMappe ? JSON.stringify([aktiveMappe.name, aktiveMappe.items, aktiveMappe.hideSections]) : ''
   useLayoutEffect(() => {
     if (!geladen || !aktiveMappe || aktiveMappe.items.length === 0) {
       setDokument(null)
@@ -394,7 +400,7 @@ export function App() {
     let abgebrochen = false
     setBaut(true)
     versuchen(async () => {
-      const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current)
+      const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current, aktiveMappe.hideSections)
       if (abgebrochen) return
       for (const n of dok.notizen) {
         if (n.layoutKaputt) kaputteLayouts.current.add(n.pfad)
@@ -595,7 +601,7 @@ export function App() {
   /** Komplett neu anfangen: Layout aller Notizen der Mappe, „Direkt anschließen“ und „Tinte sparen“ zurück auf automatisch. */
   function allesZuruecksetzen() {
     if (!dokument || !aktiveMappe) return
-    if (!confirm(`Alle manuellen Änderungen in der Mappe „${aktiveMappe.name}“ verwerfen?\n\nUmbrüche, Bildgrößen, Schrift, Ausgeblendetes, „Direkt anschließen“ und „Tinte sparen“ werden zurückgesetzt. Notizen, Reihenfolge, Auszüge und eingefügte Notizen bleiben. Rückgängig ist möglich.`)) return
+    if (!confirm(`Alle manuellen Änderungen in der Mappe „${aktiveMappe.name}“ verwerfen?\n\nUmbrüche, Bildgrößen, Schrift, Ausgeblendetes, „Direkt anschließen“ und „Tinte sparen“ werden zurückgesetzt. Notizen, Reihenfolge, Auszüge, eingefügte Notizen und Regeln aus „Suchen und Ausblenden“ bleiben. Rückgängig ist möglich.`)) return
     const geaendert = schrittAusfuehren(
       dokument.notizen.map((t) => ({ pfad: t.pfad, aendern: layoutZuruecksetzen })),
       mappeZuruecksetzen,
@@ -744,9 +750,23 @@ export function App() {
   // neu umbrochen, gedruckt wird nach diesem Umbruch (fertig)
   const druckenWennFertig = useRef(false)
 
+  /** Abschnitt, den eine Ausblende-Regel der aktiven Mappe trifft (Suchen und Ausblenden) */
+  function regelTrifft(block: Block): boolean {
+    return block.typ === 'heading' && block.pfad.length > 1 && !!ausblendRegel(aktiveMappe?.hideSections, block.pfad.at(-1) ?? '')
+  }
+
+  /** Nach dem neuesten Layout und den Regeln der Mappe – nicht nach dem zuletzt aufgebauten Dokument */
   function ausgeblendet(id: string): boolean {
     const b = blockSuchen(id)
-    return b?.index !== undefined && layoutVon(b.teil).items[b.index]?.hidden === true
+    if (!b) return false
+    const hidden = b.index !== undefined ? layoutVon(b.teil).items[b.index]?.hidden : undefined
+    return hidden === true || (hidden === undefined && regelTrifft(b.block))
+  }
+
+  /** Block bzw. Abschnitt aus- oder einblenden; berücksichtigt die Ausblende-Regeln */
+  function sichtbarkeitSetzen(id: string, ausblenden: boolean) {
+    const b = blockSuchen(id)
+    if (b) blockAendern(id, ausblendenSetzen(ausblenden, regelTrifft(b.block)))
   }
 
   // ---- Eingaben aus der Seitenansicht ----
@@ -792,7 +812,7 @@ export function App() {
     else if (strg && k === 'z' && !e.shiftKey) zurueck()
     else if (strg && (k === 'y' || (k === 'z' && e.shiftKey))) vor()
     else if (strg && k === 'enter' && gewaehlt) blockAendern(auswahl, umbruchUmschalten(true))
-    else if ((k === 'delete' || k === 'backspace') && gewaehlt) blockAendern(auswahl, ausblendenSetzen(true))
+    else if ((k === 'delete' || k === 'backspace') && gewaehlt) sichtbarkeitSetzen(auswahl!, true)
     else if (k === 'escape') {
       setAuswahl(null)
       setZuweisen(null)
@@ -815,12 +835,13 @@ export function App() {
     kontext: (id, x, y) => setKontext({ id, x, y }),
     bildGroesse: (id, mm) => blockAendern(id, bildSetzen({ widthMm: mm })),
     bildVerschieben: (id, align, dy, bezug) => {
-      // Umfließendes Bild: an den Block unter der neuen Oberkante hängen (nur im eigenen Abschnitt)
-      const bloecke = blockSuchen(id)?.teil.bloecke ?? []
-      const position = bezug ? umflussPosition(bloecke, id, bezug.block, bezug.versatzMm) : null
+      // Bild oder Tabelle; umfließend: an den Block unter der neuen Oberkante hängen (nur im eigenen Abschnitt)
+      const gefunden = blockSuchen(id)
+      const art: Objekt = gefunden?.block.typ === 'table' ? 'table' : 'image'
+      const position = bezug ? umflussPosition(gefunden?.teil.bloecke ?? [], id, bezug.block, bezug.versatzMm) : null
       blockAendern(id, (e) => {
-        if (position) return bildSetzen({ align, ...position })(e)
-        return bildVerschieben(align, dy)(e)
+        if (position) return objektSetzen(art, { align, ...position })(e)
+        return bildVerschieben(align, dy, art)(e)
       })
     },
     tabelleSpalten: (id, prozent) => blockAendern(id, tabelleSetzen({ columnsPct: prozent })),
@@ -912,7 +933,8 @@ export function App() {
     { id: 'zurueck', text: 'Rückgängig', symbol: Undo2, ort: 'Start', taste: 'Strg+Z', aktion: zurueck, gesperrt: verlauf.zurueck.length === 0 },
     { id: 'vor', text: 'Wiederholen', symbol: Redo2, ort: 'Start', taste: 'Strg+Y', aktion: vor, gesperrt: verlauf.vor.length === 0 },
     { id: 'umbruch', text: 'Seitenumbruch vor dem Block', symbol: SeparatorHorizontal, ort: 'Layout', taste: 'Strg+Enter', aktion: () => blockAendern(auswahl, umbruchUmschalten(true)), gesperrt: !gewaehlt, stichworte: 'neue seite' },
-    { id: 'ausblenden', text: 'Block im Druck ausblenden', symbol: EyeOff, ort: 'Start', taste: 'Entf', aktion: () => blockAendern(auswahl, ausblendenSetzen(true)), gesperrt: !gewaehlt, stichworte: 'verstecken entfernen weglassen' },
+    { id: 'ausblenden', text: 'Block im Druck ausblenden', symbol: EyeOff, ort: 'Start', taste: 'Entf', aktion: () => sichtbarkeitSetzen(auswahl!, true), gesperrt: !gewaehlt, stichworte: 'verstecken entfernen weglassen' },
+    { id: 'abschnitte-ausblenden', text: 'Suchen und Ausblenden', symbol: SearchX, ort: 'Start', aktion: () => setDialog('ausblenden'), gesperrt: ohneDok || !aktiveMappe, stichworte: 'abschnitt überschrift quellen literatur regel verstecken' },
     { id: 'block-zuruecksetzen', text: 'Block zurücksetzen', symbol: RotateCcw, ort: 'Start', aktion: () => blockAendern(auswahl, eintragZuruecksetzen), gesperrt: !gewaehlt?.eintrag },
     { id: 'teilen', text: 'Teilen über Seiten erlauben', symbol: SeparatorHorizontal, ort: 'Layout', aktion: () => blockAendern(auswahl, teilenSetzen(true)), gesperrt: !gewaehlt || !['heading', 'list', 'callout', 'code'].includes(gewaehlt.block.typ), stichworte: 'umbruch abschnitt' },
     { id: 'formatieren', text: 'Automatisch formatieren', symbol: WandSparkles, ort: 'Layout', aktion: () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)), gesperrt: ohneDok || status.laeuft, stichworte: 'seiten passen schrift kleiner' },
@@ -1029,6 +1051,8 @@ export function App() {
           onWoerter={woerterZaehlen}
           onTastenkuerzel={() => setDialog('tasten')}
           onOptionen={() => dateiOeffnen('optionen')}
+          onAbschnitteAusblenden={dokument && aktiveMappe ? () => setDialog('ausblenden') : null}
+          ausblendRegeln={aktiveMappe?.hideSections?.length ?? 0}
         />
       </div>
 
@@ -1047,7 +1071,7 @@ export function App() {
           teile={dokument?.notizen ?? []}
           auswahl={auswahl}
           onSprung={springen}
-          onAusblenden={(id, wert) => blockAendern(id, ausblendenSetzen(wert))}
+          onAusblenden={sichtbarkeitSetzen}
           istAusgeblendet={ausgeblendet}
           onSchliessen={() => setNav(false)}
           suchfeld={suchfeld}
@@ -1122,7 +1146,14 @@ export function App() {
         <Hinweise
           hinweise={hinweise}
           onSprung={springen}
-          onEinblenden={(notiz, i) => hinweisEintragAendern(notiz, i, (l, j) => eintragAnIndex(l, j, ausblendenSetzen(false)))}
+          onEinblenden={(notiz, i) => {
+            // Trifft auch eine Ausblende-Regel, muss Einblenden sie für diesen Abschnitt aufheben
+            const teil = dokument?.notizen.find((n) => n.pfad === notiz)
+            const anker = teil?.layout.items[i]?.anchor
+            const block = teil && anker ? blockFinden(anker, teil.bloecke)?.block : undefined
+            hinweisEintragAendern(notiz, i, (l, j) => eintragAnIndex(l, j, ausblendenSetzen(false, !!block && regelTrifft(block))))
+          }}
+          onEinblendenBlock={(id) => sichtbarkeitSetzen(id, false)}
           onZuweisen={(notiz, index) => {
             const anker = dokument?.notizen.find((n) => n.pfad === notiz)?.layout.items[index]?.anchor
             if (anker) setZuweisen({ notiz, anker: JSON.stringify(anker) })
@@ -1169,6 +1200,17 @@ export function App() {
         <Wortanzahl statistik={statistik} seiten={seiten} notizen={dokument?.notizen.length ?? 0} onSchliessen={() => setDialog(null)} />
       )}
       {dialog === 'tasten' && <Tastenkombinationen onSchliessen={() => setDialog(null)} />}
+      {dialog === 'ausblenden' && aktiveMappe && (
+        <AbschnitteAusblenden
+          teile={dokument?.notizen ?? []}
+          regeln={aktiveMappe.hideSections ?? []}
+          onRegel={(begriff, an) => aktiveMappeAendern(ausblendRegelSetzen(begriff, an))}
+          istAusgeblendet={ausgeblendet}
+          onAusblenden={sichtbarkeitSetzen}
+          onSprung={springen}
+          onSchliessen={() => setDialog(null)}
+        />
+      )}
       <Zugriffstasten ref={zugriffstasten} onStart={() => vollbild && setKopfOffen(true)} />
       <QuickInfo />
     </div>

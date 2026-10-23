@@ -71,6 +71,11 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   sonst liegt ihr Hintergrund unter dem Bild; solche Blöcke weichen dem ganzen Float aus, nicht nur dem Bild. Deshalb
   „tiefer im Absatz“ als unsichtbarer Float ohne Breite davor (`.umfluss-abstand`) + `clear`, nicht als Innenabstand.
   `image.before` verankert das Bild an einem Block desselben Abschnitts (beim Ziehen gesetzt).
+  Tabellen können dasselbe (`table.wrap`, `offsetYMm`, `wrapGapMm`, `before`; Breite bleibt `widthPct`):
+  `objektSetzen`/`umfliessenSetzen(an, art)` in `bearbeiten.ts`. Eine umfließende Tabelle wird nie geteilt.
+- Suchen und Ausblenden: Regeln der Mappe (`hideSections`, Überschrift enthält den Begriff) wendet `layoutAnwenden`
+  an, mit Hinweis je Abschnitt. Einblenden trotz Regel = `hidden: false` im Layout (`ausblendenSetzen(wert, regel)`);
+  in der App immer über `sichtbarkeitSetzen`, das die Regel prüft.
 - Layout-Dateien, die sich nicht lesen lassen, sind gesperrt (`NotizTeil.layoutKaputt`, in der App `kaputteLayouts`) –
   nie überschreiben. Dasselbe gilt für eine beschädigte `mappen.json` (`mappenGesperrt` in `App.tsx`).
 - Hinweise tragen den Index des Layout-Eintrags aus dem zuletzt aufgebauten Dokument; Aktionen darauf suchen den Eintrag

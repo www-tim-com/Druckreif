@@ -8,6 +8,7 @@
 
 import type { Block } from '../dokument/bloecke'
 import type { Hinweis } from '../hinweise'
+import { ausblendRegel } from '../mappen/mappen'
 import { pruefsumme } from '../dokument/bloecke'
 import type { Anker, BlockTyp, LayoutDatei, LayoutEintrag } from './layoutDatei'
 
@@ -84,8 +85,11 @@ function aehnlichkeit(a: string, b: string): number {
   return (2 * gemeinsam) / (wa.length + wb.length)
 }
 
-/** Wendet das Layout im DOM an und liefert die Hinweise dazu. */
-export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke: Block[], notizPfad: string): Hinweis[] {
+/**
+ * Wendet das Layout im DOM an und liefert die Hinweise dazu. `regeln`: Ausblende-Regeln der Mappe (Suchen und
+ * Ausblenden) – passende Abschnitte fallen weg, außer ihr Eintrag sagt hidden: false.
+ */
+export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke: Block[], notizPfad: string, regeln: string[] = []): Hinweis[] {
   const hinweise: Hinweis[] = []
   // Block-ID -> Index des zugeordneten Eintrags: ein zweiter Eintrag für denselben Block wird rot gemeldet
   const zuordnung = new Map<string, number>()
@@ -114,14 +118,29 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
       ausblenden.push(abschnittOderBlock(el))
     } else {
       eintragAnwenden(el, eintrag)
-      const bild = eintrag.image
-      if (bild?.wrap) {
+      // Bilder und Tabellen: Bezugsblock und „tiefer im Absatz“ beim Textumbruch
+      const lage = el.tagName === 'TABLE' ? eintrag.table : eintrag.image
+      if (lage?.wrap) {
         const melden = (text: string) => hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `${text}: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung', block })
-        if (bild.before) bildVersetzen(wurzel, el, bild.before, bloecke, melden)
-        if (bild.offsetYMm && bild.offsetYMm > 0) umflussAbstand(el, bild.offsetYMm)
+        if (lage.before) bildVersetzen(wurzel, el, lage.before, bloecke, melden)
+        if (lage.offsetYMm && lage.offsetYMm > 0) umflussAbstand(el, lage.offsetYMm)
       }
     }
   })
+  // Ausblende-Regeln der Mappe: nie stillschweigend – jeder Abschnitt steht mit „Einblenden“ in den Hinweisen
+  for (const b of bloecke) {
+    // nur Abschnitte (##…), nie der Titel der Notiz
+    const regel = b.typ === 'heading' && b.pfad.length > 1 ? ausblendRegel(regeln, b.pfad.at(-1) ?? '') : null
+    if (!regel) continue
+    const index = zuordnung.get(b.id)
+    if (index !== undefined && layout.items[index].hidden !== undefined) continue // ausdrücklich ein- oder schon ausgeblendet
+    const el = wurzel.querySelector<HTMLElement>(`[data-block="${b.id}"]`)
+    const ziel = el && abschnittOderBlock(el)
+    // liegt schon in einem ausgeblendeten Abschnitt
+    if (!ziel || ausblenden.some((a) => a.contains(ziel))) continue
+    hinweise.push({ stufe: 'info', notiz: notizPfad, text: `Im Druck ausgeblendet (Regel „${regel}“): Abschnitt „${b.pfad.at(-1)}“`, art: 'ausgeblendet', block: b.id })
+    ausblenden.push(ziel)
+  }
   // Erst am Ende entfernen, damit verschachtelte Blöcke vorher noch gefunden werden
   for (const el of ausblenden) el.remove()
   return hinweise
@@ -135,10 +154,10 @@ function bildVersetzen(wurzel: HTMLElement, bild: HTMLElement, anker: Anker, blo
   const treffer = blockFinden(anker, bloecke)
   const ziel = treffer && wurzel.querySelector<HTMLElement>(`[data-block="${treffer.block.id}"]`)
   if (!ziel || ziel === bild || ziel.parentElement !== bild.parentElement) {
-    melden('Bild steht an der ursprünglichen Stelle, Bezugsabsatz nicht gefunden')
+    melden(`${bild.tagName === 'TABLE' ? 'Tabelle' : 'Bild'} steht an der ursprünglichen Stelle, Bezugsabsatz nicht gefunden`)
     return
   }
-  if (!treffer.sicher) melden('Bildposition unsicher zugeordnet')
+  if (!treffer.sicher) melden(`${bild.tagName === 'TABLE' ? 'Tabellenposition' : 'Bildposition'} unsicher zugeordnet`)
   ziel.before(bild)
 }
 
@@ -196,7 +215,13 @@ function eintragAnwenden(el: HTMLElement, e: LayoutEintrag) {
     if (tabelle.columnsPct) spaltenSetzen(el as HTMLTableElement, tabelle.columnsPct)
     if (tabelle.fontSizePt !== undefined) el.style.fontSize = `${tabelle.fontSizePt}pt`
     if (tabelle.compact) el.classList.add('kompakt')
-    if (tabelle.split) el.classList.add('teilbar')
+    if (tabelle.wrap) {
+      el.classList.add('umfliessen')
+      if (tabelle.wrapGapMm !== undefined) el.style.setProperty('--umfluss-abstand', `${tabelle.wrapGapMm}mm`)
+    } else {
+      if (tabelle.split) el.classList.add('teilbar')
+      if (tabelle.offsetYMm !== undefined) el.style.marginTop = `${tabelle.offsetYMm}mm`
+    }
   }
 
   const bild = e.image

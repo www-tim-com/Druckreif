@@ -63,8 +63,12 @@ export function teilenSetzen(wert: boolean) {
   return (e: LayoutEintrag): LayoutEintrag => ({ ...e, split: wert || undefined })
 }
 
-export function ausblendenSetzen(wert: boolean) {
-  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, hidden: wert || undefined })
+/**
+ * Im Druck ausblenden oder einblenden. `regel`: eine Ausblende-Regel der Mappe trifft den Abschnitt – dann blendet
+ * die Regel aus (kein eigener Eintrag nötig) und Einblenden muss sie ausdrücklich aufheben (hidden: false).
+ */
+export function ausblendenSetzen(wert: boolean, regel = false) {
+  return (e: LayoutEintrag): LayoutEintrag => ({ ...e, hidden: wert ? (regel ? undefined : true) : regel ? false : undefined })
 }
 
 export function abstandSetzen(vorher: number | undefined, nachher: number | undefined) {
@@ -80,15 +84,36 @@ export function bildZuruecksetzen(e: LayoutEintrag): LayoutEintrag {
   return { ...e, image: undefined }
 }
 
+/** Bilder und Tabellen lassen sich gleich anordnen: Ausrichtung, Textumbruch, Abstand, Bezugsblock */
+export type Objekt = 'image' | 'table'
+export type Lage = Pick<BildLayout, 'align' | 'wrap' | 'offsetYMm' | 'wrapGapMm' | 'before'>
+
+export function objektSetzen(art: Objekt, teil: Partial<Lage>) {
+  return art === 'image' ? bildSetzen(teil) : tabelleSetzen(teil)
+}
+
+/** Breite, ab der eine umfließende Tabelle keinen Platz für Text ließe – dann halb so breit wie der Text */
+const TABELLE_UMFLUSS_MAX_PCT = 90
+const TABELLE_UMFLUSS_PCT = 50
+
 /**
- * Textumbruch an (Bild schwebt links oder rechts, Text fließt herum) oder aus (Bild wieder als eigene Zeile an
- * seiner Stelle in der Notiz; Bezugsabsatz und Abstände des Umbruchs fallen weg).
+ * Textumbruch an (Bild bzw. Tabelle schwebt links oder rechts, Text fließt herum) oder aus (wieder als eigene Zeile
+ * an seiner Stelle in der Notiz; Bezugsabsatz und Abstände des Umbruchs fallen weg).
  */
-export function umfliessenSetzen(an: boolean) {
-  return (e: LayoutEintrag): LayoutEintrag =>
-    an
-      ? bildSetzen({ wrap: true, align: e.image?.align === 'left' ? 'left' : 'right' })(e)
-      : bildSetzen({ wrap: undefined, before: undefined, wrapGapMm: undefined, offsetYMm: undefined })(e)
+export function umfliessenSetzen(an: boolean, art: Objekt = 'image') {
+  return (e: LayoutEintrag): LayoutEintrag => {
+    if (!an) return objektSetzen(art, { wrap: undefined, before: undefined, wrapGapMm: undefined, offsetYMm: undefined })(e)
+    const align = e[art]?.align === 'left' ? 'left' : 'right'
+    if (art === 'image') return bildSetzen({ wrap: true, align })(e)
+    // Eine schwebende Tabelle läuft nicht über Seiten; ganz breit ließe sie dem Text keinen Platz
+    const breite = e.table?.widthPct
+    return tabelleSetzen({
+      wrap: true,
+      align,
+      split: undefined,
+      widthPct: breite !== undefined && breite < TABELLE_UMFLUSS_MAX_PCT ? breite : TABELLE_UMFLUSS_PCT,
+    })(e)
+  }
 }
 
 export const MAX_BILDVERSATZ_MM = 150
@@ -97,12 +122,13 @@ export const MIN_BILDVERSATZ_MM = -30
 /** Textbreite: A4 (210 mm) minus Seitenränder 25 + 18 mm aus @page in druck.css */
 export const TEXTBREITE_MM = 167
 
-/** Bild um `dy` mm nach unten/oben schieben (Ziehen), in den erlaubten Grenzen */
-export function bildVerschieben(align: BildLayout['align'], dy: number) {
+/** Bild bzw. Tabelle um `dy` mm nach unten/oben schieben (Ziehen), in den erlaubten Grenzen */
+export function bildVerschieben(align: BildLayout['align'], dy: number, art: Objekt = 'image') {
   return (e: LayoutEintrag): LayoutEintrag => {
-    const min = e.image?.wrap ? 0 : MIN_BILDVERSATZ_MM
-    const versatz = Math.min(MAX_BILDVERSATZ_MM, Math.max(min, (e.image?.offsetYMm ?? 0) + dy))
-    return bildSetzen({ align, offsetYMm: versatz || undefined })(e)
+    const lage = e[art]
+    const min = lage?.wrap ? 0 : MIN_BILDVERSATZ_MM
+    const versatz = Math.min(MAX_BILDVERSATZ_MM, Math.max(min, (lage?.offsetYMm ?? 0) + dy))
+    return objektSetzen(art, { align, offsetYMm: versatz || undefined })(e)
   }
 }
 
@@ -110,7 +136,7 @@ export function bildVerschieben(align: BildLayout['align'], dy: number) {
  * Wohin ein umfließendes Bild nach dem Ziehen gehört: vor den Block `zielId`, `versatzMm` unter dessen Anfang.
  * Nur innerhalb des Abschnitts des Bildes; sonst null. Eine Überschrift zählt als Anfang ihres Abschnitts.
  */
-export function umflussPosition(bloecke: Block[], bildId: string, zielId: string, versatzMm: number): Partial<BildLayout> | null {
+export function umflussPosition(bloecke: Block[], bildId: string, zielId: string, versatzMm: number): Partial<Lage> | null {
   const bild = bloecke.findIndex((b) => b.id === bildId)
   let ziel = bloecke.findIndex((b) => b.id === zielId)
   if (bild < 0 || ziel < 0) return null

@@ -250,8 +250,12 @@ code { font-size: 0.95em; }
   font-weight: 600;
 }
 .knoepfe button:hover:not(:disabled), .dialog footer button:hover { background: var(--hover); }
-button.primaer { background: var(--akzent-fuellung); border-color: var(--akzent-fuellung); color: white; }
-button.primaer:hover:not(:disabled) { background: var(--akzent-fuellung-hover); }
+button.primaer,
+.knoepfe button.primaer,
+.dialog footer button.primaer { background: var(--akzent-fuellung); border-color: var(--akzent-fuellung); color: white; }
+button.primaer:hover:not(:disabled),
+.knoepfe button.primaer:hover:not(:disabled),
+.dialog footer button.primaer:hover { background: var(--akzent-fuellung-hover); }
 
 /* Suchfeld (Alt+Q) mit Ergebnisliste */
 .befehlssuche {
@@ -717,6 +721,30 @@ button.primaer:hover:not(:disabled) { background: var(--akzent-fuellung-hover); 
 .kuerzel dl > div { display: flex; gap: 12px; padding: 3px 0; }
 .kuerzel dt { flex: 0 0 190px; }
 .kuerzel dd { margin: 0; color: var(--leise); }
+.dialog.breit { width: min(620px, calc(100vw - 32px)); }
+.ausblenden-suche { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.ausblenden-suche .dokumentsuche { flex: 1; margin: 0; }
+.ausblenden-suche button { display: flex; align-items: center; gap: 6px; white-space: nowrap; border: 1px solid var(--feld-rahmen); border-radius: 4px; background: var(--karte); padding: 5px 12px; font-weight: 600; }
+.ausblenden-suche button:hover:not(:disabled) { background: var(--hover); }
+.ausblenden-suche button.primaer:hover:not(:disabled) { background: var(--akzent-fuellung-hover); }
+.ausblenden-treffer { border: 1px solid var(--linie); border-radius: 6px; }
+.ausblenden-treffer .anzahl { padding: 6px 10px; font-size: 12px; color: var(--leise); border-bottom: 1px solid var(--linie); }
+.ausblenden-treffer ul { list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow: auto; }
+.ausblenden-treffer li { display: flex; align-items: center; border-radius: 4px; }
+.ausblenden-treffer li:hover { background: var(--hover); }
+.ausblenden-treffer .sprung { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: none; background: none; padding: 5px 8px; text-align: left; }
+.ausblenden-treffer .notiz { font-size: 11px; color: var(--leise); }
+.ausblenden-treffer .pfad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.ausblenden-treffer li.versteckt .pfad { color: var(--blass); text-decoration: line-through; }
+.ausblenden-treffer .auge { border: none; background: none; padding: 6px 8px; border-radius: 4px; color: var(--leise); display: grid; }
+.ausblenden-treffer li.versteckt .auge { color: var(--akzent); }
+.ausblenden-treffer .auge:hover { background: var(--hover-stark); }
+.ausblenden-kopf { font-size: 13px; margin: 16px 0 6px; }
+.regeln { display: flex; flex-wrap: wrap; gap: 6px; }
+.regel { display: inline-flex; align-items: center; border: 1px solid var(--akzent-rahmen); background: var(--akzent-hell); border-radius: 12px; }
+.regel button { border: none; background: none; padding: 2px 4px 2px 10px; }
+.regel .weg { padding: 3px 7px 3px 3px; display: grid; color: var(--leise); }
+.regel .weg:hover { color: var(--rot); }
 kbd { font: inherit; font-size: 12px; padding: 1px 6px; border: 1px solid var(--feld-rahmen); border-bottom-width: 2px; border-radius: 4px; background: var(--karte-2); }
 
 /* ---- Datei (Backstage) ---- */
