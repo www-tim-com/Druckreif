@@ -85,6 +85,19 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   Wiederverwenden erneut ausgelöst. Notizen und Bilder werden parallel gelesen (Hinweise je Notiz gesammelt).
   Nach erfolgreichem Speichern kein zweiter Aufbau. Der Notizbaum (`Seitenleiste`) ist `memo` mit stabilen Rückrufen
   und zeichnet zugeklappte Ordner nicht. `leerraumFinden` erst messen, dann markieren (sonst ein Layout pro Seite).
+- Setzer (`Vorschau.tsx`): geänderte Gruppen bricht Paged.js in einem dauerhaft geladenen unsichtbaren iframe um
+  (`new Paged.Previewer().preview(...)`), danach werden nur deren Seiten im sichtbaren iframe getauscht
+  (`seitenEinsetzen` fasst unveränderte Seiten nicht an). Erzeugt Paged.js dabei anderes CSS als für die sichtbare
+  Fassung (`pagedCss`), oder passt etwas nicht, wird wie bisher alles im zweiten iframe umbrochen. Paged.js wartet
+  sonst nach jeder Seite auf einen Bildschirm-Frame → `PAGED_TAKT` (MessageChannel).
+- Neustart (`neustart.ts`): bei einer geänderten Notiz erst ab der Seite vor der ersten Abweichung neu setzen
+  (zusammengehaltene Einheiten und Überschriften beachtet), Hüllen als Fortsetzung wie auf der alten Seite
+  (`data-split-from`); Paged.js hört auf (Fehler aus `afterPageLayout`, es kennt kein Anhalten), sobald eine neue
+  Seite sauber mit demselben Block beginnt wie eine alte und ab dort alles gleich ist. Prüfen: Seiten nach
+  Teil-Umbruch mit einem vollständigen vergleichen (Blöcke je Seite, Textlängen, Hüllen, Leerraum).
+- Seiten außerhalb des Sichtbereichs: `content-visibility: auto` (nur Bildschirm, `vorschau.css`). Leerraum wird nur
+  ab der ersten geänderten Seite neu gemessen. Aufbau und Umbruch starten in `useLayoutEffect` (nicht erst nach dem
+  nächsten Frame); Notiztexte merkt `aufbauen.ts` mit Änderungszeit.
 
 ## Prüfen
 

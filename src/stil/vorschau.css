@@ -16,6 +16,9 @@
   .pagedjs_page {
     background: #fff;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.18);
+    /* Seiten außerhalb des Sichtbereichs nicht layouten und zeichnen (lange Mappen bleiben flüssig) */
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--pagedjs-width) auto var(--pagedjs-height);
   }
 
   [data-block] {

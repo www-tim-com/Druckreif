@@ -44,14 +44,20 @@ export function leerraumKnopf(l: Leerraum): string | null {
   return l.art && l.block ? LEERRAUM_KNOPF[l.art] : null
 }
 
-/** Sucht halb leere Seiten und markiert sie auf dem Bildschirm. */
-export function leerraumFinden(dok: Document): Leerraum[] {
-  for (const alt of dok.querySelectorAll('.druckreif-leerraum')) alt.remove()
+/**
+ * Sucht halb leere Seiten und markiert sie auf dem Bildschirm. `gleich`: so viele Seiten am Anfang sind seit der
+ * letzten Suche (`bisher`) unverändert – deren Ergebnis bleibt, gemessen wird erst ab der letzten davon (ihr Leerraum
+ * hängt an der nächsten Seite). Messen zwingt den Browser, die Seite zu layouten.
+ */
+export function leerraumFinden(dok: Document, gleich = 0, bisher: Leerraum[] = []): Leerraum[] {
   const seiten = [...dok.querySelectorAll<HTMLElement>('.pagedjs_page')]
-  const liste: Leerraum[] = []
+  const ab = Math.max(0, gleich - 1)
+  const neu = new Set(seiten.slice(ab))
+  for (const alt of dok.querySelectorAll('.druckreif-leerraum')) if (neu.has(alt.closest<HTMLElement>('.pagedjs_page')!)) alt.remove()
+  const liste: Leerraum[] = bisher.filter((l) => l.seite <= ab)
   const marken: { seite: HTMLElement; rand: DOMRect; flaeche: DOMRect; unten: number }[] = []
   // Die letzte Seite darf leer auslaufen
-  for (let i = 0; i < seiten.length - 1; i++) {
+  for (let i = ab; i < seiten.length - 1; i++) {
     const inhalt = seiten[i].querySelector<HTMLElement>('.pagedjs_page_content')
     if (!inhalt) continue
     const flaeche = inhalt.getBoundingClientRect()
@@ -72,7 +78,8 @@ export function leerraumFinden(dok: Document): Leerraum[] {
     marken.push({ seite: seiten[i], rand: seiten[i].getBoundingClientRect(), flaeche, unten })
   }
   // Erst alles messen, dann markieren: jede Markierung zwischen den Messungen erzwänge ein neues Layout aller Seiten
-  marken.forEach((m, i) => markieren(m.seite, m.rand, m.flaeche, m.unten, liste[i], i))
+  const behalten = liste.length - marken.length
+  marken.forEach((m, i) => markieren(m.seite, m.rand, m.flaeche, m.unten, liste[behalten + i], behalten + i))
   return liste
 }
 

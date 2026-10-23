@@ -1,7 +1,7 @@
 // Oberfläche wie in Word: Titelleiste, Menüband, Navigationsbereich, Seiten, Hinweise, Statusleiste.
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen, stempel } from './dokument/aufbauen'
 import type { Block } from './dokument/bloecke'
 import type { Hinweis } from './hinweise'
@@ -294,10 +294,10 @@ export function App() {
     })
   }, [])
 
-  // Dokument aufbauen bei Änderung der Mappe oder der Dateien. Kurz warten, damit schnelle Folgeänderungen
-  // (z. B. mehrmals auf einen Pfeil klicken) nur einen Neuaufbau auslösen.
+  // Dokument aufbauen bei Änderung der Mappe oder der Dateien. useLayoutEffect: sofort nach der Änderung starten,
+  // nicht erst nach dem nächsten Bildschirm-Frame. Ein überholter Aufbau wird verworfen (abgebrochen).
   const mappenSchluessel = aktiveMappe ? JSON.stringify([aktiveMappe.name, aktiveMappe.items]) : ''
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!geladen || !aktiveMappe || aktiveMappe.items.length === 0) {
       setDokument(null)
       setBaut(false)
@@ -305,26 +305,23 @@ export function App() {
     }
     let abgebrochen = false
     setBaut(true)
-    const timer = setTimeout(() => {
-      versuchen(async () => {
-        const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current)
-        if (abgebrochen) return
-        for (const n of dok.notizen) {
-          if (n.layoutKaputt) kaputteLayouts.current.add(n.pfad)
-          else kaputteLayouts.current.delete(n.pfad)
-        }
-        setDokument(dok)
-        setBaut(false)
-        // Während gespeichert wird, ist layouts.current neuer als das Dokument (layoutSchreiben setzt es vorher)
-        if (speichertRef.current === 0) {
-          layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
-          setLayoutStand((s) => s + 1)
-        }
-      })
-    }, 50)
+    versuchen(async () => {
+      const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current)
+      if (abgebrochen) return
+      for (const n of dok.notizen) {
+        if (n.layoutKaputt) kaputteLayouts.current.add(n.pfad)
+        else kaputteLayouts.current.delete(n.pfad)
+      }
+      setDokument(dok)
+      setBaut(false)
+      // Während gespeichert wird, ist layouts.current neuer als das Dokument (layoutSchreiben setzt es vorher)
+      if (speichertRef.current === 0) {
+        layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
+        setLayoutStand((s) => s + 1)
+      }
+    })
     return () => {
       abgebrochen = true
-      clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geladen, mappenSchluessel, stand])

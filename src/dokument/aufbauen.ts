@@ -61,8 +61,7 @@ export async function dokumentAufbauen(
   const texte = await Promise.all(
     eintraege.map(async (eintrag) => {
       if (!vault.dateien.includes(eintrag.note)) return null
-      quellen.set(eintrag.note, await stempel(vault, eintrag.note))
-      return vault.lesenText(eintrag.note)
+      return notizLesen(vault, eintrag.note, quellen)
     }),
   )
   for (const [index, eintrag] of eintraege.entries()) {
@@ -133,8 +132,7 @@ async function notizAufbauen(
   ausstehend?: Map<string, LayoutDatei>,
 ): Promise<{ article: HTMLElement; notiz: NotizTeil }> {
   const name = notizName(pfad)
-  if (!quellen.has(pfad)) quellen.set(pfad, await stempel(vault, pfad))
-  const { daten, rest: text } = frontmatterLesen(await vault.lesenText(pfad))
+  const { daten, rest: text } = frontmatterLesen(await notizLesen(vault, pfad, quellen))
   const hinweis = (stufe: Stufe, t: string) => hinweise.push({ stufe, notiz: pfad, text: t })
 
   // Layout zuerst: es sagt, welche eingebetteten Notizen eingefügt werden
@@ -259,8 +257,7 @@ async function einbettungAufbauen(
     hinweis('rot', `Notiz „${ziel}“ bettet sich selbst ein – nicht eingefügt`)
     return null
   }
-  quellen.set(treffer, await stempel(vault, treffer))
-  let text = frontmatterLesen(await vault.lesenText(treffer)).rest
+  let text = frontmatterLesen(await notizLesen(vault, treffer, quellen)).rest
   if (abschnitt) {
     const teil = abschnittAusschneiden(text, abschnitt)
     if (teil === null) {
@@ -367,8 +364,27 @@ function spaeterFreigeben(urls: string[]) {
   setTimeout(() => urls.forEach((url) => URL.revokeObjectURL(url)), 30_000)
 }
 
-/** Beim Aktualisieren: Bilder neu laden (könnten ersetzt oder verschoben worden sein). */
+// Notiztexte pro Vault mit Änderungszeit merken: eine Layout-Änderung baut alles neu auf, liest aber nur
+// Dateien neu, die sich geändert haben (die Änderungszeit wird vor dem Lesen genommen, wie für `quellen`).
+const textCache = new WeakMap<Vault, Map<string, { text: Promise<string>; zeit: number }>>()
+
+async function notizLesen(vault: Vault, pfad: string, quellen: Map<string, number>): Promise<string> {
+  const zeit = quellen.get(pfad) ?? (await stempel(vault, pfad))
+  quellen.set(pfad, zeit)
+  let cache = textCache.get(vault)
+  if (!cache) textCache.set(vault, (cache = new Map()))
+  const alt = cache.get(pfad)
+  if (alt?.zeit === zeit && zeit !== -1) return alt.text
+  const text = vault.lesenText(pfad)
+  cache.set(pfad, { text, zeit })
+  // Fehler nicht merken: beim nächsten Aufbau erneut versuchen
+  text.catch(() => cache.get(pfad)?.text === text && cache.delete(pfad))
+  return text
+}
+
+/** Beim Aktualisieren: Bilder und Notiztexte neu laden (könnten ersetzt oder verschoben worden sein). */
 export function bilderVergessen(vault: Vault): void {
+  textCache.delete(vault)
   for (const e of bildCache.get(vault)?.values() ?? []) e.url.then((url) => spaeterFreigeben([url]), () => {})
   bildCache.delete(vault)
 }
