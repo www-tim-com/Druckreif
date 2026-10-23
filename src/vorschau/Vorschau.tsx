@@ -347,11 +347,11 @@ function seitenZusammensetzen(dok: Document, plan: Plan): Gruppe[] | null {
     })
     ;(flaeche as HTMLElement).style.setProperty('--pagedjs-page-count', String(alle.length))
   }
-  // unberührte Kopien für den nächsten Umbruch
+  // unberührte Kopien für den nächsten Umbruch; übernommene Gruppen behalten ihre (nie eingefügten) Kopien
   let n = 0
   for (const [i, g] of plan.gruppen.entries()) {
     const anzahl = g.alt ? g.alt.length : umbrochen.get(i)!.length
-    gruppen[i].seiten = alle.slice(n, n + anzahl).map((s) => s.cloneNode(true) as HTMLElement)
+    gruppen[i].seiten = g.alt ?? alle.slice(n, n + anzahl).map((s) => s.cloneNode(true) as HTMLElement)
     n += anzahl
   }
   return gruppen

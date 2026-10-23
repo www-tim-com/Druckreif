@@ -49,6 +49,7 @@ export function leerraumFinden(dok: Document): Leerraum[] {
   for (const alt of dok.querySelectorAll('.druckreif-leerraum')) alt.remove()
   const seiten = [...dok.querySelectorAll<HTMLElement>('.pagedjs_page')]
   const liste: Leerraum[] = []
+  const marken: { seite: HTMLElement; rand: DOMRect; flaeche: DOMRect; unten: number }[] = []
   // Die letzte Seite darf leer auslaufen
   for (let i = 0; i < seiten.length - 1; i++) {
     const inhalt = seiten[i].querySelector<HTMLElement>('.pagedjs_page_content')
@@ -67,10 +68,11 @@ export function leerraumFinden(dok: Document): Leerraum[] {
     // Läuft ein geteilter Block weiter, liegt der Leerraum nicht an einem Umbruch
     if (!erster || erster.hasAttribute('data-split-from')) continue
     const ursache = ursacheFinden(erster)
-    const eintrag: Leerraum = { seite: i + 1, anteil, ...ursache }
-    liste.push(eintrag)
-    markieren(seiten[i], flaeche, unten, eintrag, liste.length - 1)
+    liste.push({ seite: i + 1, anteil, ...ursache })
+    marken.push({ seite: seiten[i], rand: seiten[i].getBoundingClientRect(), flaeche, unten })
   }
+  // Erst alles messen, dann markieren: jede Markierung zwischen den Messungen erzwänge ein neues Layout aller Seiten
+  marken.forEach((m, i) => markieren(m.seite, m.rand, m.flaeche, m.unten, liste[i], i))
   return liste
 }
 
@@ -119,9 +121,8 @@ function beschreiben(el: HTMLElement): string {
 }
 
 /** Schraffierte Fläche über dem leeren Teil der Seite, mit Knopf. Nur Bildschirm (vorschau.css). */
-function markieren(seite: HTMLElement, flaeche: DOMRect, unten: number, l: Leerraum, index: number) {
+function markieren(seite: HTMLElement, rand: DOMRect, flaeche: DOMRect, unten: number, l: Leerraum, index: number) {
   const dok = seite.ownerDocument
-  const rand = seite.getBoundingClientRect()
   const prozent = (wert: number, gesamt: number) => `${(wert / gesamt) * 100}%`
   const marke = dok.createElement('div')
   marke.className = 'druckreif-leerraum'

@@ -21,6 +21,11 @@ export interface UmwandelKontext {
    * false = nur Platzhalter; fehlt = verschachtelte Einbettung (wird nie eingefügt).
    */
   einbettung?(ziel: string): boolean
+  /**
+   * Alles außer dem Text, was das Ergebnis der Rückrufe bestimmt (Bild-URLs, Einbettungen). Mit Schlüssel wird das
+   * Ergebnis gemerkt; ohne wird immer neu umgewandelt.
+   */
+  schluessel?: string
 }
 
 // CommonJS-Paket: je nach Bundler steckt das Plugin in .default
@@ -49,11 +54,26 @@ function parser(zeilenumbruch: boolean): MarkdownIt {
   return md
 }
 
+// Umwandeln dauert bei langen Notizen und läuft bei jeder Layout-Änderung für alle Notizen der Mappe – meist mit
+// unverändertem Text. Deshalb Ergebnisse merken (begrenzt, älteste fliegen raus).
+const MAX_GEMERKT = 100
+
+function merken<T>(speicher: Map<string, T>, schluessel: string, wert: T): T {
+  speicher.delete(schluessel)
+  speicher.set(schluessel, wert)
+  if (speicher.size > MAX_GEMERKT) speicher.delete(speicher.keys().next().value!)
+  return wert
+}
+
+const bilderGemerkt = new Map<string, string[]>()
+
 /**
  * Bildnamen aus ![[…]] und ![…](…), damit die Bilder vor dem Umwandeln geladen werden können.
  * Liest dieselben Tokens wie obsidian.ts beim Umwandeln, damit beide dieselben Namen liefern.
  */
 export function bilderFinden(text: string): string[] {
+  const alt = bilderGemerkt.get(text)
+  if (alt) return [...alt]
   const namen = new Set<string>()
   const env = { bildUrl: () => null, hinweis: () => {} }
   const besuchen = (tokens: Token[]) => {
@@ -67,7 +87,7 @@ export function bilderFinden(text: string): string[] {
     }
   }
   besuchen(parser(true).parse(vorbereiten(text), env))
-  return [...namen]
+  return [...merken(bilderGemerkt, text, [...namen])]
 }
 
 /** Ziele eingebetteter Notizen (nicht Bilder), wie in der Notiz geschrieben, z. B. „Asthma bronchiale#Therapie“. */
@@ -85,6 +105,43 @@ export function einbettungenFinden(text: string): string[] {
  * in einem Dokument stehen.
  */
 export function markdownUmwandeln(text: string, kontext: UmwandelKontext, strictLineBreaks: boolean, id: string): string {
+  if (kontext.schluessel === undefined) return umwandeln(text, kontext, strictLineBreaks, id)
+  const schluessel = JSON.stringify([text, strictLineBreaks, id, kontext.schluessel])
+  const alt = umgewandelt.get(schluessel)
+  if (alt) {
+    // Rückrufe in derselben Reihenfolge wie beim ersten Mal: Hinweise gehen nie verloren
+    for (const a of alt.aufrufe) {
+      if (a.art === 'hinweis') kontext.hinweis(a.stufe, a.text)
+      else kontext.einbettung?.(a.ziel)
+    }
+    return merken(umgewandelt, schluessel, alt).html
+  }
+  const aufrufe: Aufruf[] = []
+  const html = umwandeln(
+    text,
+    {
+      bildUrl: (name) => kontext.bildUrl(name),
+      hinweis: (stufe, t) => {
+        aufrufe.push({ art: 'hinweis', stufe, text: t })
+        kontext.hinweis(stufe, t)
+      },
+      einbettung: kontext.einbettung
+        ? (ziel) => {
+            aufrufe.push({ art: 'einbettung', ziel })
+            return kontext.einbettung!(ziel)
+          }
+        : undefined,
+    },
+    strictLineBreaks,
+    id,
+  )
+  return merken(umgewandelt, schluessel, { html, aufrufe }).html
+}
+
+type Aufruf = { art: 'hinweis'; stufe: Stufe; text: string } | { art: 'einbettung'; ziel: string }
+const umgewandelt = new Map<string, { html: string; aufrufe: Aufruf[] }>()
+
+function umwandeln(text: string, kontext: UmwandelKontext, strictLineBreaks: boolean, id: string): string {
   const html = saeubern(parser(!strictLineBreaks).render(vorbereiten(text), { ...kontext, docId: id }), kontext)
   return formelFehlerErsetzen(html, kontext)
 }

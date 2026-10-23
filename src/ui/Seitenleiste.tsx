@@ -1,7 +1,9 @@
 // Ordnerbaum mit Suche nach Titel und Filter nach Frontmatter.
 // Klick auf eine Notiz = an die aktive Mappe anhängen, Ordner-Symbol = in einer neuen Mappe öffnen.
+// Große Vaults haben tausende Notizen: der Baum wird nur neu gezeichnet, wenn sich Notizen oder Mappe ändern (memo),
+// und zugeklappte Ordner zeichnen ihren Inhalt gar nicht.
 
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Check, FolderPlus } from 'lucide-react'
 import { type Notiz, passtZuFilter } from '../vault/notizen'
 
@@ -26,7 +28,7 @@ interface Ordner {
   notizen: Notiz[]
 }
 
-export function Seitenleiste({ notizen, inMappe, onKlick, onNeueMappe }: Props) {
+export const Seitenleiste = memo(function Seitenleiste({ notizen, inMappe, onKlick, onNeueMappe }: Props) {
   const [suche, setSuche] = useState('')
   const [filter, setFilter] = useState('')
 
@@ -52,19 +54,14 @@ export function Seitenleiste({ notizen, inMappe, onKlick, onNeueMappe }: Props) 
       </div>
     </aside>
   )
-}
+})
 
 function OrdnerAnsicht({ ordner, offen, ...ansicht }: AnsichtProps & { ordner: Ordner; offen: boolean }) {
   const { inMappe, onKlick, onNeueMappe } = ansicht
   return (
     <ul>
       {ordner.ordner.map((o) => (
-        <li key={o.pfad}>
-          <details open={offen || [...inMappe].some((p) => p.startsWith(o.pfad + '/'))}>
-            <summary>{o.name}</summary>
-            <OrdnerAnsicht ordner={o} {...ansicht} offen={offen} />
-          </details>
-        </li>
+        <OrdnerZeile key={o.pfad} ordner={o} {...ansicht} offen={offen} />
       ))}
       {ordner.notizen.map((n) => (
         <li key={n.pfad} className="notiz-zeile">
@@ -83,6 +80,25 @@ function OrdnerAnsicht({ ordner, offen, ...ansicht }: AnsichtProps & { ordner: O
         </li>
       ))}
     </ul>
+  )
+}
+
+function OrdnerZeile({ ordner, offen, ...ansicht }: AnsichtProps & { ordner: Ordner; offen: boolean }) {
+  // aufgeklappt bei Suche/Filter oder wenn eine Notiz daraus in der Mappe steht; sonst wie vom Nutzer geklickt
+  const soll = offen || [...ansicht.inMappe].some((p) => p.startsWith(ordner.pfad + '/'))
+  const [auf, setAuf] = useState(soll)
+  const [vorher, setVorher] = useState(soll)
+  if (soll !== vorher) {
+    setVorher(soll)
+    setAuf(soll)
+  }
+  return (
+    <li>
+      <details open={auf} onToggle={(e) => setAuf(e.currentTarget.open)}>
+        <summary>{ordner.name}</summary>
+        {auf && <OrdnerAnsicht ordner={ordner} {...ansicht} offen={offen} />}
+      </details>
+    </li>
   )
 }
 

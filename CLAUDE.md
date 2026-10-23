@@ -80,6 +80,11 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
 - Code- und `$$`-Formelblöcke (auch in Callouts und Listen) erkennt `geschuetzteZeilen()` in `vorbereiten.ts` – auch für
   das Ausschneiden eingebetteter Abschnitte. Frontmatter entfernt der Aufrufer, nicht `vorbereiten()`.
 - In die Vorschau-iframes geht Vault-CSS nur mit `<` als CSS-Escape (`\3c`), sonst beendet `</style>` das Element.
+- Tempo (jede Aktion baut alles neu auf): `markdownUmwandeln` merkt Ergebnisse, wenn der Kontext einen `schluessel`
+  hat – der muss alles enthalten, was die Rückrufe liefern (Bild-URLs, Einbettungen); Hinweise werden beim
+  Wiederverwenden erneut ausgelöst. Notizen und Bilder werden parallel gelesen (Hinweise je Notiz gesammelt).
+  Nach erfolgreichem Speichern kein zweiter Aufbau. Der Notizbaum (`Seitenleiste`) ist `memo` mit stabilen Rückrufen
+  und zeichnet zugeklappte Ordner nicht. `leerraumFinden` erst messen, dann markieren (sonst ein Layout pro Seite).
 
 ## Prüfen
 

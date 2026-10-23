@@ -57,13 +57,21 @@ export async function dokumentAufbauen(
   const quellen = new Map<string, number>()
   const teile: { pfad: string; eintrag: MappenEintrag; index: number }[] = []
 
+  // Dateien gleichzeitig lesen (jeder Zugriff auf den Ordner dauert), ausgewertet wird in der Reihenfolge der Mappe
+  const texte = await Promise.all(
+    eintraege.map(async (eintrag) => {
+      if (!vault.dateien.includes(eintrag.note)) return null
+      quellen.set(eintrag.note, await stempel(vault, eintrag.note))
+      return vault.lesenText(eintrag.note)
+    }),
+  )
   for (const [index, eintrag] of eintraege.entries()) {
-    if (!vault.dateien.includes(eintrag.note)) {
+    const text = texte[index]
+    if (text === null) {
       hinweise.push({ stufe: 'rot', notiz: eintrag.note, text: 'Notiz nicht gefunden (umbenannt oder verschoben?) – bitte aus der Mappe entfernen' })
       continue
     }
-    quellen.set(eintrag.note, await stempel(vault, eintrag.note))
-    const reihenfolge = reihenfolgeLesen(await vault.lesenText(eintrag.note))
+    const reihenfolge = reihenfolgeLesen(text)
     if (!reihenfolge) teile.push({ pfad: eintrag.note, eintrag, index })
     else {
       // „direkt anschließen“ des Eintrags gilt für die erste Notiz der Reihenfolge
@@ -78,13 +86,20 @@ export async function dokumentAufbauen(
     hinweise.push({ stufe: 'gelb', notiz: doppelt, text: 'Notiz steht mehrfach im Dokument' })
   }
 
+  // Notizen gleichzeitig aufbauen; Hinweise je Notiz sammeln, damit ihre Reihenfolge gleich bleibt
+  const gebaut = await Promise.all(
+    teile.map(async (t, i) => {
+      const eigene: Hinweis[] = []
+      return { ...(await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, eigene, quellen, ausstehend)), eigene }
+    }),
+  )
   const container = document.createElement('div')
   const notizen: NotizTeil[] = []
-  for (const [i, t] of teile.entries()) {
-    const teil = await notizAufbauen(vault, t.pfad, `n${i}`, t.eintrag, t.index, einstellungen, hinweise, quellen, ausstehend)
+  for (const [i, teil] of gebaut.entries()) {
     if (i > 0) teil.article.classList.add('folgend')
     container.append(teil.article)
     notizen.push(teil.notiz)
+    hinweise.push(...teil.eigene)
   }
   await diagrammeZeichnen(container, (text, notiz) => hinweise.push({ stufe: 'rot', notiz, text }))
 
@@ -145,6 +160,7 @@ async function notizAufbauen(
     {
       bildUrl: (n) => bildUrls.get(n) ?? null,
       hinweis,
+      schluessel: JSON.stringify([[...bildUrls], [...einbettungen], [...einfuegen]]),
       einbettung: (ziel) => {
         const inhalt = einbettungen.get(ziel)
         // Nie stillschweigend weglassen: jede Einbettung steht in den Hinweisen, mit Knopf zum Umschalten
@@ -201,18 +217,17 @@ async function bilderLaden(
 ): Promise<Map<string, string | null>> {
   const notizOrdner = ordner(notizPfad)
   const anhang = anhangOrdnerFuer(einstellungen.anhangOrdner, notizOrdner)
-  const bildUrls = new Map<string, string | null>()
-  for (const bild of bilderFinden(text)) {
-    const treffer = dateiFinden(vault, bild, notizOrdner, anhang)
-    if (typeof treffer !== 'string') {
-      bildUrls.set(bild, null)
-      continue
-    }
-    const zeit = await stempel(vault, treffer)
-    quellen.set(treffer, zeit)
-    bildUrls.set(bild, await bildUrl(vault, treffer, zeit))
-  }
-  return bildUrls
+  const bilder = bilderFinden(text)
+  const urls = await Promise.all(
+    bilder.map(async (bild) => {
+      const treffer = dateiFinden(vault, bild, notizOrdner, anhang)
+      if (typeof treffer !== 'string') return null
+      const zeit = await stempel(vault, treffer)
+      quellen.set(treffer, zeit)
+      return bildUrl(vault, treffer, zeit)
+    }),
+  )
+  return new Map(bilder.map((bild, i) => [bild, urls[i]]))
 }
 
 /**
@@ -255,7 +270,8 @@ async function einbettungAufbauen(
     text = teil
   }
   const bildUrls = await bilderLaden(vault, text, treffer, einstellungen, quellen)
-  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis }, einstellungen.strictLineBreaks, id)
+  const schluessel = JSON.stringify([...bildUrls])
+  return markdownUmwandeln(text, { bildUrl: (n) => bildUrls.get(n) ?? null, hinweis, schluessel }, einstellungen.strictLineBreaks, id)
 }
 
 /** `cssclasses` (bzw. älter `cssclass`) aus dem Frontmatter: Liste oder durch Leerzeichen/Komma getrennt */
@@ -342,8 +358,9 @@ function abschnitteAuswaehlen(article: HTMLElement, auswahl: string[], hinweis: 
 }
 
 // Blob-URLs pro Vault zwischenspeichern, damit Bilder nicht bei jeder Änderung neu geladen werden.
-// Mit Änderungszeit: ein unter gleichem Namen ersetztes Bild wird neu geladen.
-const bildCache = new WeakMap<Vault, Map<string, { url: string; zeit: number }>>()
+// Mit Änderungszeit: ein unter gleichem Namen ersetztes Bild wird neu geladen. Gespeichert wird das Versprechen,
+// damit gleichzeitig aufgebaute Notizen mit demselben Bild es nur einmal lesen.
+const bildCache = new WeakMap<Vault, Map<string, { url: Promise<string>; zeit: number }>>()
 
 /** Erst später freigeben: die gerade sichtbare Fassung zeigt die Bilder noch an. */
 function spaeterFreigeben(urls: string[]) {
@@ -352,7 +369,7 @@ function spaeterFreigeben(urls: string[]) {
 
 /** Beim Aktualisieren: Bilder neu laden (könnten ersetzt oder verschoben worden sein). */
 export function bilderVergessen(vault: Vault): void {
-  spaeterFreigeben([...(bildCache.get(vault)?.values() ?? [])].map((e) => e.url))
+  for (const e of bildCache.get(vault)?.values() ?? []) e.url.then((url) => spaeterFreigeben([url]), () => {})
   bildCache.delete(vault)
 }
 
@@ -361,8 +378,10 @@ async function bildUrl(vault: Vault, pfad: string, zeit: number): Promise<string
   if (!cache) bildCache.set(vault, (cache = new Map()))
   const alt = cache.get(pfad)
   if (alt?.zeit === zeit) return alt.url
-  const url = URL.createObjectURL(await vault.lesenBlob(pfad))
+  const url = vault.lesenBlob(pfad).then((blob) => URL.createObjectURL(blob))
   cache.set(pfad, { url, zeit })
-  if (alt) spaeterFreigeben([alt.url])
+  // Fehler nicht merken: beim nächsten Aufbau erneut versuchen
+  url.catch(() => cache.get(pfad)?.url === url && cache.delete(pfad))
+  if (alt) alt.url.then((u) => spaeterFreigeben([u]), () => {})
   return url
 }

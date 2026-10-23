@@ -1,7 +1,7 @@
 // Navigationsbereich links (wie in Word): Dokument durchsuchen, Notizen wählen, durch Überschriften oder Seiten springen.
 
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
-import type { RefObject } from 'react'
+import { type RefObject, useCallback, useMemo, useRef } from 'react'
 import { MAX_TREFFER, type Treffer } from '../vorschau/suche'
 import type { Notiz } from '../vault/notizen'
 import type { NotizTeil } from '../dokument/aufbauen'
@@ -50,7 +50,12 @@ interface Props {
 
 export function Navigationsbereich(p: Props) {
   const { ansicht, onAnsicht: setAnsicht } = p
-  const inMappe = new Set(p.mappe?.items.map((e) => e.note) ?? [])
+  // gleichbleibende Props für die Seitenleiste (memo): sonst zeichnet jede Änderung den ganzen Notizbaum neu
+  const inMappe = useMemo(() => new Set(p.mappe?.items.map((e) => e.note) ?? []), [p.mappe])
+  const aktuell = useRef(p)
+  aktuell.current = p
+  const notizKlick = useCallback((pfad: string) => aktuell.current.onNotizKlick(pfad), [])
+  const neueMappe = useCallback((pfad: string) => aktuell.current.onNeueMappe(pfad), [])
   return (
     <aside className="navigation">
       <header>
@@ -119,7 +124,7 @@ export function Navigationsbereich(p: Props) {
           <p className="mappe-leer">Keine Mappe offen. Unter „Notizen“ eine Notiz anklicken oder oben „+“ für eine neue Mappe.</p>
         ))}
       {ansicht === 'notizen' && (
-        <Seitenleiste notizen={p.notizen} inMappe={inMappe} onKlick={p.onNotizKlick} onNeueMappe={p.onNeueMappe} />
+        <Seitenleiste notizen={p.notizen} inMappe={inMappe} onKlick={notizKlick} onNeueMappe={neueMappe} />
       )}
       {ansicht === 'gliederung' && (
         <Gliederung teile={p.teile} auswahl={p.auswahl} onSprung={p.onSprung} onAusblenden={p.onAusblenden} istAusgeblendet={p.istAusgeblendet} />

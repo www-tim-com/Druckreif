@@ -315,6 +315,7 @@ export function App() {
         }
         setDokument(dok)
         setBaut(false)
+        // Während gespeichert wird, ist layouts.current neuer als das Dokument (layoutSchreiben setzt es vorher)
         if (speichertRef.current === 0) {
           layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
           setLayoutStand((s) => s + 1)
@@ -392,14 +393,17 @@ export function App() {
     setSpeichert(speichertRef.current)
     ausstehend.current.set(layout.note, layout)
     setStand((s) => s + 1)
+    let gespeichert = false
     try {
       await layoutSpeichern(geladen.vault, layout)
+      gespeichert = true
     } finally {
-      // erneut aufbauen, jetzt aus der Datei (ergibt dasselbe HTML, also keinen neuen Umbruch – außer das Speichern schlug fehl)
       if (ausstehend.current.get(layout.note) === layout) ausstehend.current.delete(layout.note)
       speichertRef.current--
       setSpeichert(speichertRef.current)
-      setStand((s) => s + 1)
+      // Gespeichert: das Dokument zeigt diesen Stand schon (ein zweiter Aufbau aus der Datei ergäbe dasselbe).
+      // Fehlgeschlagen: aus der Datei neu aufbauen, damit die Ansicht zeigt, was wirklich gespeichert ist.
+      if (!gespeichert) setStand((s) => s + 1)
     }
   }
 
