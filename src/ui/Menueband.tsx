@@ -1,8 +1,23 @@
-// Menüband wie in Word: Registerkarten Datei, Start, Layout, Ansicht und – nur bei gewähltem Bild – Bildformat.
-// Das Band kennt keine Logik: Es zeigt den Zustand an und ruft die Befehle der App auf.
+// Menüband wie im modernen Word: Registerkarten Datei, Start, Layout, Überprüfen, Ansicht, Hilfe und – nur bei
+// gewähltem Bild bzw. gewählter Tabelle – Bildformat und Tabellenlayout. Rechts Hinweise und Drucken (wie Kommentare
+// und Teilen), unten rechts die Menüband-Anzeigeoptionen. Das Band kennt keine Logik: Es zeigt den Zustand an und
+// ruft die Befehle der App auf.
 
+import { useEffect, useRef, useState } from 'react'
 import {
   ALargeSmall,
+  BookOpenText,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Focus,
+  Keyboard,
+  MessageSquareWarning,
+  MoveHorizontal,
+  Pin,
+  Ruler,
+  Settings,
+  Square,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -52,8 +67,19 @@ import {
   TEXTBREITE_MM,
 } from '../layout/bearbeiten'
 import { Gruppe, GrosserKnopf, KleinerKnopf, SymbolKnopf, Zahlfeld, ZOOM_MAX, ZOOM_MIN, zahlText } from './Band'
+import type { BandAnzeige } from './oberflaeche'
+import { quickinfo } from './QuickInfo'
 
-export type Reiter = 'start' | 'layout' | 'ansicht' | 'bild' | 'tabelle'
+export type Reiter = 'start' | 'layout' | 'pruefen' | 'ansicht' | 'hilfe' | 'bild' | 'tabelle'
+
+/** Zugriffstasten (Alt) der Registerkarten wie in der deutschen Word-Oberfläche */
+const REITER: { id: Reiter; text: string; taste: string }[] = [
+  { id: 'start', text: 'Start', taste: 'R' },
+  { id: 'layout', text: 'Layout', taste: 'P' },
+  { id: 'pruefen', text: 'Überprüfen', taste: 'Ü' },
+  { id: 'ansicht', text: 'Ansicht', taste: 'F' },
+  { id: 'hilfe', text: 'Hilfe', taste: 'Y' },
+]
 
 interface Schrift {
   fontSizePt?: number
@@ -95,6 +121,8 @@ interface BandProps {
 
   zoom: number
   onZoom(z: number): void
+  /** Zoom, bei dem die Seitenbreite bzw. eine ganze Seite ins Fenster passt (null: keine Seiten) */
+  zoomFuer(art: 'breite' | 'seite'): number | null
   nav: boolean
   onNav(an: boolean): void
   hinweise: boolean
@@ -117,44 +145,192 @@ interface BandProps {
   seiteNummer: number
   /** Komplett neu anfangen: alle Notizen der Mappe und Mappen-Einstellungen */
   allesZuruecksetzen: (() => void) | null
+
+  /** Anzahl offener Hinweise (Knopf rechts wie „Kommentare“) */
+  probleme: number
+  bandAnzeige: BandAnzeige
+  onBandAnzeige(a: BandAnzeige): void
+  schnellzugriff: boolean
+  onSchnellzugriff(an: boolean): void
+  lineal: boolean
+  onLineal(an: boolean): void
+  onWoerter(): void
+  onTastenkuerzel(): void
+  onOptionen(): void
 }
 
 export function Menueband(p: BandProps) {
   const kontext = p.block?.typ === 'image' ? 'bild' : p.block?.typ === 'table' ? 'tabelle' : null
-  const reiter: { id: Reiter; text: string }[] = [
-    { id: 'start', text: 'Start' },
-    { id: 'layout', text: 'Layout' },
-    { id: 'ansicht', text: 'Ansicht' },
-  ]
-  if (kontext === 'bild') reiter.push({ id: 'bild', text: 'Bildformat' })
-  if (kontext === 'tabelle') reiter.push({ id: 'tabelle', text: 'Tabellenlayout' })
+  const reiter = [...REITER]
+  if (kontext === 'bild') reiter.push({ id: 'bild', text: 'Bildformat', taste: 'JP' })
+  if (kontext === 'tabelle') reiter.push({ id: 'tabelle', text: 'Tabellenlayout', taste: 'JL' })
   const istKontext = p.reiter === 'bild' || p.reiter === 'tabelle'
   const aktuell = istKontext && p.reiter !== kontext ? 'start' : p.reiter
 
+  // „Nur Registerkarten“: ein Klick auf eine Karte klappt das Band kurz über dem Dokument auf
+  const [aufgeklappt, setAufgeklappt] = useState(false)
+  const [menue, setMenue] = useState<{ art: 'anzeige' | 'rechts'; x: number; y: number } | null>(null)
+  const wurzel = useRef<HTMLDivElement>(null)
+  const reduziert = p.bandAnzeige === 'register'
+  useEffect(() => {
+    if (!aufgeklappt && !menue) return
+    const zu = (e: PointerEvent) => {
+      const ziel = e.target as Element
+      if (menue && !ziel.closest('.band-menue')) setMenue(null)
+      if (aufgeklappt && !wurzel.current?.contains(ziel)) setAufgeklappt(false)
+    }
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setMenue(null)
+      setAufgeklappt(false)
+    }
+    // Klick in die Seiten (iframe) nimmt dem Fenster den Fokus
+    const weg = () => {
+      setMenue(null)
+      setAufgeklappt(false)
+    }
+    window.addEventListener('pointerdown', zu)
+    window.addEventListener('keydown', esc)
+    window.addEventListener('blur', weg)
+    return () => {
+      window.removeEventListener('pointerdown', zu)
+      window.removeEventListener('keydown', esc)
+      window.removeEventListener('blur', weg)
+    }
+  }, [aufgeklappt, menue])
+  useEffect(() => {
+    if (!reduziert) setAufgeklappt(false)
+  }, [reduziert])
+
+  const reiterKlick = (id: Reiter) => {
+    p.onReiter(id)
+    if (reduziert) setAufgeklappt(id !== aktuell || !aufgeklappt)
+  }
+  const bandSichtbar = !reduziert || aufgeklappt
+  const anzeigeWaehlen = (a: BandAnzeige) => {
+    setMenue(null)
+    setAufgeklappt(false)
+    p.onBandAnzeige(a)
+  }
+
   return (
-    <div className="menueband">
-      <nav className="reiter">
-        <button className="reiter-datei" onClick={p.onDatei}>
+    <div
+      className={`menueband${reduziert ? ' reduziert' : ''}${aufgeklappt ? ' aufgeklappt' : ''}`}
+      ref={wurzel}
+      onContextMenu={(e) => {
+        if ((e.target as Element).closest('input')) return
+        e.preventDefault()
+        setMenue({ art: 'rechts', x: e.clientX, y: e.clientY })
+      }}
+    >
+      <nav className="reiter" role="tablist">
+        <button className="reiter-datei" onClick={p.onDatei} data-keytip="D">
           Datei
         </button>
         {reiter.map((r) => (
           <button
             key={r.id}
-            className={`${r.id === aktuell ? 'gewaehlt' : ''}${r.id === kontext ? ' kontext' : ''}`}
-            onClick={() => p.onReiter(r.id)}
+            role="tab"
+            aria-selected={r.id === aktuell}
+            className={`${r.id === aktuell && bandSichtbar ? 'gewaehlt' : ''}${r.id === kontext ? ' kontext' : ''}`}
+            data-keytip={r.taste}
+            onClick={() => reiterKlick(r.id)}
+            onDoubleClick={() => anzeigeWaehlen(reduziert ? 'immer' : 'register')}
           >
             {r.text}
           </button>
         ))}
+        <span className="reiter-abstand" />
+        <button
+          className={`reiter-aktion${p.hinweise ? ' an' : ''}`}
+          onClick={() => p.onHinweise(!p.hinweise)}
+          data-keytip="C"
+          {...quickinfo('Hinweise', 'Was beim Umwandeln auffiel: Fehler, zu prüfende Stellen, ausgeblendete Abschnitte, halb leere Seiten')}
+        >
+          <MessageSquareWarning size={16} /> Hinweise
+          {p.probleme > 0 && <span className="zahl">{p.probleme}</span>}
+        </button>
+        <button className="reiter-drucken" onClick={p.drucken} data-keytip="Z" {...quickinfo('Drucken', 'Drucken oder als PDF speichern (Strg+P)')}>
+          <Printer size={16} /> Drucken
+        </button>
       </nav>
-      <div className="band">
-        {aktuell === 'start' && <StartReiter {...p} />}
-        {aktuell === 'layout' && <LayoutReiter {...p} />}
-        {aktuell === 'ansicht' && <AnsichtReiter {...p} />}
-        {aktuell === 'bild' && <BildReiter {...p} />}
-        {aktuell === 'tabelle' && <TabellenReiter {...p} />}
-      </div>
+      {bandSichtbar && (
+        <div
+          className="band"
+          onClick={(e) => {
+            // Aufgeklapptes Band schließt nach einem Befehl wieder (nicht beim Tippen in Zahlenfelder)
+            if (aufgeklappt && (e.target as Element).closest('button') && !(e.target as Element).closest('.band-zahl, .band-optionen')) setAufgeklappt(false)
+          }}
+        >
+          {aktuell === 'start' && <StartReiter {...p} />}
+          {aktuell === 'layout' && <LayoutReiter {...p} />}
+          {aktuell === 'pruefen' && <PruefenReiter {...p} />}
+          {aktuell === 'ansicht' && <AnsichtReiter {...p} />}
+          {aktuell === 'hilfe' && <HilfeReiter {...p} />}
+          {aktuell === 'bild' && <BildReiter {...p} />}
+          {aktuell === 'tabelle' && <TabellenReiter {...p} />}
+          <span className="band-abstand" />
+          {aufgeklappt ? (
+            <button className="band-optionen" onClick={() => anzeigeWaehlen('immer')} aria-label="Menüband anheften" {...quickinfo('Menüband anheften', 'Menüband immer anzeigen (Strg+F1)')}>
+              <Pin size={14} />
+            </button>
+          ) : (
+            <button
+              className="band-optionen"
+              aria-label="Menüband-Anzeigeoptionen"
+              {...quickinfo('Menüband-Anzeigeoptionen', 'Menüband immer, nur die Registerkarten oder gar nicht anzeigen (Strg+F1)')}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                setMenue({ art: 'anzeige', x: r.right - 280, y: r.bottom + 4 })
+              }}
+            >
+              <ChevronDown size={14} />
+            </button>
+          )}
+        </div>
+      )}
+      {menue && (
+        <div className="band-menue kontextmenue" style={{ left: Math.max(4, Math.min(menue.x, innerWidth - 290)), top: menue.y }}>
+          {menue.art === 'anzeige' ? (
+            <>
+              <AnzeigeOption an={p.bandAnzeige === 'vollbild'} symbol={Maximize2} titel="Vollbildmodus" text="Menüband ausblenden, für die beste Sicht auf die Seiten. Oben rechts „…“ zeigt es wieder." onClick={() => anzeigeWaehlen('vollbild')} />
+              <AnzeigeOption an={reduziert} symbol={ChevronUp} titel="Nur Registerkarten anzeigen" text="Ein Klick auf eine Registerkarte zeigt die Befehle." onClick={() => anzeigeWaehlen('register')} />
+              <AnzeigeOption an={p.bandAnzeige === 'immer'} symbol={Square} titel="Menüband immer anzeigen" text="Registerkarten und Befehle bleiben sichtbar." onClick={() => anzeigeWaehlen('immer')} />
+              <hr />
+              <button onClick={() => { setMenue(null); p.onSchnellzugriff(!p.schnellzugriff) }}>
+                {p.schnellzugriff ? <Check size={15} /> : <span className="leer-symbol" />} Symbolleiste für den Schnellzugriff anzeigen
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { setMenue(null); p.onSchnellzugriff(!p.schnellzugriff) }}>
+                {p.schnellzugriff ? <Check size={15} /> : <span className="leer-symbol" />} Symbolleiste für den Schnellzugriff anzeigen
+              </button>
+              <button onClick={() => anzeigeWaehlen(reduziert ? 'immer' : 'register')}>
+                {reduziert ? <Check size={15} /> : <span className="leer-symbol" />} Menüband reduzieren
+              </button>
+              <hr />
+              <button onClick={() => { setMenue(null); p.onOptionen() }}>
+                <Settings size={15} /> Optionen …
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+function AnzeigeOption(o: { an: boolean; symbol: typeof Square; titel: string; text: string; onClick(): void }) {
+  const Symbol = o.symbol
+  return (
+    <button className={`anzeige-option${o.an ? ' an' : ''}`} onClick={o.onClick}>
+      <Symbol size={18} />
+      <span>
+        <strong>{o.titel}</strong>
+        <small>{o.text}</small>
+      </span>
+    </button>
   )
 }
 
@@ -329,22 +505,76 @@ function TeilenKnopf(p: BandProps) {
   )
 }
 
-function AnsichtReiter(p: BandProps) {
+function PruefenReiter(p: BandProps) {
   return (
     <>
+      <Gruppe titel="Dokumentprüfung">
+        <GrosserKnopf symbol={MessageSquareWarning} text={p.probleme > 0 ? `Hinweise (${p.probleme})` : 'Hinweise'} aktiv={p.hinweise} onClick={() => p.onHinweise(!p.hinweise)}
+          tipp="Aufgabenbereich mit allem, was beim Umwandeln auffiel: Fehler, zu prüfende Stellen, Ausgeblendetes, halb leere Seiten" />
+        <GrosserKnopf symbol={BookOpenText} text="Wörter zählen" onClick={p.onWoerter} tipp="Seiten, Wörter, Zeichen und Absätze der gedruckten Mappe" />
+      </Gruppe>
+      <Gruppe titel="Suchen">
+        <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
+      </Gruppe>
+      <Gruppe titel="Formatierung">
+        <GrosserKnopf symbol={Pilcrow} text="Umbrüche zeigen" aktiv={p.zeichen} onClick={() => p.onZeichen(!p.zeichen)} tipp="Manuelle Seitenumbrüche auf den Seiten markieren" />
+      </Gruppe>
+      <ZuruecksetzenGruppe {...p} />
+    </>
+  )
+}
+
+function AnsichtReiter(p: BandProps) {
+  const zoomAuf = (art: 'breite' | 'seite') => {
+    const z = p.zoomFuer(art)
+    if (z) p.onZoom(z)
+  }
+  return (
+    <>
+      <Gruppe titel="Ansichten">
+        <GrosserKnopf symbol={FileText} text="Drucklayout" aktiv onClick={() => {}} tipp="Seiten so, wie sie gedruckt werden (die einzige Ansicht: was hier steht, kommt aufs Papier)" />
+        <GrosserKnopf symbol={Focus} text="Fokus" aktiv={p.bandAnzeige === 'vollbild'} onClick={() => p.onBandAnzeige(p.bandAnzeige === 'vollbild' ? 'immer' : 'vollbild')} tipp="Menüband und Titelleiste ausblenden – nur die Seiten (oben rechts „…“ holt sie zurück)" />
+      </Gruppe>
+      <Gruppe titel="Anzeigen">
+        <div className="spalte">
+          <KleinerKnopf symbol={Ruler} text="Lineal" aktiv={p.lineal} onClick={() => p.onLineal(!p.lineal)} tipp="Lineal über den Seiten: Seitenränder und Textbreite in Zentimetern" />
+          <KleinerKnopf symbol={ListTree} text="Navigationsbereich" aktiv={p.nav} onClick={() => p.onNav(!p.nav)} tipp="Mappe, Notizen, Überschriften und Seiten links" />
+          <KleinerKnopf symbol={PanelRight} text="Hinweise" aktiv={p.hinweise} onClick={() => p.onHinweise(!p.hinweise)} />
+        </div>
+        <GrosserKnopf symbol={Pilcrow} text="Umbrüche zeigen" aktiv={p.zeichen} onClick={() => p.onZeichen(!p.zeichen)} tipp="Manuelle Seitenumbrüche auf den Seiten markieren" />
+      </Gruppe>
       <Gruppe titel="Zoom">
-        <KleinerKnopf symbol={Minus} text="Verkleinern" onClick={() => p.onZoom(p.zoom - 0.1)} gesperrt={p.zoom <= ZOOM_MIN} />
-        <GrosserKnopf symbol={Maximize2} text="100 %" onClick={() => p.onZoom(1)} />
-        <KleinerKnopf symbol={Plus} text="Vergrößern" onClick={() => p.onZoom(p.zoom + 0.1)} gesperrt={p.zoom >= ZOOM_MAX} />
+        <GrosserKnopf symbol={Search} text={`${Math.round(p.zoom * 100)} %`} onClick={() => p.onZoom(1)} tipp="Auf 100 % zurücksetzen" />
+        <div className="spalte">
+          <KleinerKnopf symbol={Square} text="Eine Seite" onClick={() => zoomAuf('seite')} tipp="So zoomen, dass eine ganze Seite ins Fenster passt" />
+          <KleinerKnopf symbol={MoveHorizontal} text="Seitenbreite" onClick={() => zoomAuf('breite')} tipp="So zoomen, dass die Seite das Fenster in der Breite ausfüllt" />
+          <div className="zeile">
+            <SymbolKnopf symbol={Minus} text="Verkleinern" onClick={() => p.onZoom(p.zoom - 0.1)} gesperrt={p.zoom <= ZOOM_MIN} />
+            <SymbolKnopf symbol={Maximize2} text="100 %" onClick={() => p.onZoom(1)} />
+            <SymbolKnopf symbol={Plus} text="Vergrößern" onClick={() => p.onZoom(p.zoom + 0.1)} gesperrt={p.zoom >= ZOOM_MAX} />
+          </div>
+        </div>
       </Gruppe>
       <Gruppe titel="Vault">
         <GrosserKnopf symbol={RefreshCw} text="Aktualisieren" tipp="Vault neu einlesen (F5)" onClick={p.aktualisieren} />
       </Gruppe>
-      <Gruppe titel="Anzeigen">
-        <GrosserKnopf symbol={ListTree} text="Navigation" aktiv={p.nav} onClick={() => p.onNav(!p.nav)} />
-        <GrosserKnopf symbol={Search} text="Suchen" tipp="Im Dokument suchen (Strg+F)" onClick={p.onSuche} />
-        <GrosserKnopf symbol={PanelRight} text="Hinweise" aktiv={p.hinweise} onClick={() => p.onHinweise(!p.hinweise)} />
-        <GrosserKnopf symbol={Pilcrow} text="Umbrüche zeigen" aktiv={p.zeichen} onClick={() => p.onZeichen(!p.zeichen)} tipp="Manuelle Seitenumbrüche auf den Seiten markieren" />
+    </>
+  )
+}
+
+function HilfeReiter(p: BandProps) {
+  return (
+    <>
+      <Gruppe titel="Hilfe">
+        <GrosserKnopf symbol={Keyboard} text="Tasten­kombinationen" onClick={p.onTastenkuerzel} tipp="Alle Tastenkürzel auf einen Blick. Alt drückt Zugriffstasten auf das Menüband." />
+        <GrosserKnopf symbol={Settings} text="Optionen" onClick={p.onOptionen} tipp="Office-Design (hell, dunkel), Menüband, Schnellzugriff" />
+      </Gruppe>
+      <Gruppe titel="Bedienung">
+        <div className="spalte hilfetext">
+          <span>Klick auf einen Block wählt ihn, Rechtsklick zeigt Befehle.</span>
+          <span>Bilder ziehen verschiebt sie, die Ecken ändern die Größe.</span>
+          <span>Alt+Q: Befehl suchen · Alt: Zugriffstasten</span>
+        </div>
       </Gruppe>
     </>
   )

@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { quickinfo } from './QuickInfo'
 
 export function Gruppe({ titel, children }: { titel: string; children: ReactNode }) {
   return (
@@ -24,7 +25,7 @@ interface KnopfProps {
 
 export function GrosserKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt, tipp }: KnopfProps) {
   return (
-    <button className={`band-gross${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} title={tipp ?? text}>
+    <button className={`band-gross${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} {...quickinfo(text, tipp)}>
       <Symbol size={26} strokeWidth={1.4} />
       <span>{text}</span>
     </button>
@@ -33,7 +34,7 @@ export function GrosserKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt, t
 
 export function KleinerKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt, tipp }: KnopfProps) {
   return (
-    <button className={`band-klein${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} title={tipp ?? text}>
+    <button className={`band-klein${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} {...quickinfo(text, tipp)}>
       <Symbol size={16} strokeWidth={1.6} />
       <span>{text}</span>
     </button>
@@ -41,9 +42,9 @@ export function KleinerKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt, t
 }
 
 /** Nur Symbol, z. B. für Ausrichtung links/mittig/rechts */
-export function SymbolKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt }: KnopfProps) {
+export function SymbolKnopf({ symbol: Symbol, text, onClick, aktiv, gesperrt, tipp }: KnopfProps) {
   return (
-    <button className={`band-symbol${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} title={text} aria-label={text}>
+    <button className={`band-symbol${aktiv ? ' an' : ''}`} onClick={onClick} disabled={gesperrt} aria-label={text} {...quickinfo(text, tipp)}>
       <Symbol size={16} strokeWidth={1.6} />
     </button>
   )

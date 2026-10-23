@@ -95,6 +95,10 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   (`data-split-from`); Paged.js hört auf (Fehler aus `afterPageLayout`, es kennt kein Anhalten), sobald eine neue
   Seite sauber mit demselben Block beginnt wie eine alte und ab dort alles gleich ist. Prüfen: Seiten nach
   Teil-Umbruch mit einem vollständigen vergleichen (Blöcke je Seite, Textlängen, Hüllen, Leerraum).
+- Oberfläche (modernes Word): Farben nur als CSS-Variablen in `app.css`, Office-Design über `data-design` an `<html>`
+  (`ui/oberflaeche.ts`, localStorage). Die Druckseiten bleiben in jedem Design weiß; nur die Fläche drumherum wird
+  dunkel (`html.dunkel` in `vorschau.css`). QuickInfos über `quickinfo()` statt `title`; Zugriffstasten (Alt) brauchen
+  auch `keyup` aus den Seiten-iframes (`interaktion.ts`). Neue Befehle auch in die Befehlsliste der Suche (`befehle` in `App.tsx`).
 - Seiten außerhalb des Sichtbereichs: `content-visibility: auto` (nur Bildschirm, `vorschau.css`). Leerraum wird nur
   ab der ersten geänderten Seite neu gemessen. Aufbau und Umbruch starten in `useLayoutEffect` (nicht erst nach dem
   nächsten Frame); Notiztexte merkt `aufbauen.ts` mit Änderungszeit.

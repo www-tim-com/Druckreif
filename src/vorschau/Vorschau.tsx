@@ -42,6 +42,30 @@ export interface VorschauSteuerung {
   miniaturHtml(): string | null
   /** Unsichtbar umbrechen und die Seiten zählen; `anpassen` ändert vorher eine Kopie des Inhalts (automatisch formatieren) */
   seitenMessen(anpassen: (inhalt: DocumentFragment) => void): Promise<number>
+  /** Zoom, bei dem die Seitenbreite bzw. eine ganze Seite in den sichtbaren Bereich passt */
+  zoomFuer(art: 'breite' | 'seite'): number | null
+  /** Zahlen für „Wörter zählen“ (nur was gedruckt wird); `genau`: auch Absätze und Zeilen (misst jedes Element) */
+  statistik(genau: boolean): Statistik | null
+  /** Lage der Seite in der Mitte des Sichtbereichs, für das Lineal (px relativ zur Seitenansicht) */
+  linealMass(): LinealMass | null
+  /** Fenster der sichtbaren Fassung (Scrollen für das Lineal) */
+  fenster(): Window | null
+}
+
+export interface Statistik {
+  woerter: number
+  zeichen: number
+  zeichenOhneLeerzeichen: number
+  absaetze: number
+  zeilen: number
+}
+
+export interface LinealMass {
+  seiteLinks: number
+  seiteBreite: number
+  textLinks: number
+  textBreite: number
+  breiteMm: number
 }
 
 export interface Fertig {
@@ -62,6 +86,8 @@ interface Props {
   baut: boolean
   /** Callouts und Tabellenköpfe ohne farbige Flächen (druck.css) */
   tinteSparen: boolean
+  /** dunkles Office-Design: Arbeitsfläche um die (weiß bleibenden) Seiten dunkel */
+  dunkel: boolean
   /** Suchbegriff (Strg+F) und gewählter Treffer */
   suche: string
   trefferAktiv: number
@@ -72,7 +98,7 @@ interface Props {
 }
 
 // Leere Seite in der Farbe der Arbeitsfläche, solange noch nichts umbrochen ist
-const LEER = '<!doctype html><body style="margin:0;background:#e6e6e6"></body>'
+const LEER = '<!doctype html><body style="margin:0;background:transparent"></body>'
 
 const SCHRIFTEN = [notoSans400, notoSans400i, notoSans700, notoSans700i, notoMono, katexCss].join('\n')
 
@@ -150,7 +176,7 @@ PagedPolyfill.chunker.q.tick = druckreifTakt`
 const NICHT_TEILBAR = /\+|nth-|counter|string-set|:first|:left|:right|:blank|:\s*(left|right|recto|verso)\b/
 
 export function Vorschau(p: Props) {
-  const { html, vaultCss, titel, zoom, auswahl, zeichen, baut, tinteSparen, suche, trefferAktiv, ref } = p
+  const { html, vaultCss, titel, zoom, auswahl, zeichen, baut, tinteSparen, dunkel, suche, trefferAktiv, ref } = p
   const flaeche = useRef<HTMLDivElement>(null)
   const rahmen = [useRef<HTMLIFrameElement>(null), useRef<HTMLIFrameElement>(null)]
   const [aktiv, setAktiv] = useState(0)
@@ -237,6 +263,62 @@ export function Vorschau(p: Props) {
         messung.srcdoc = seiteBauen(kopie.innerHTML, a.vaultCss, a.titel, -1, a.tinteSparen)
         flaeche.current!.append(messung)
       })
+    },
+    zoomFuer(art) {
+      const dok = aktivesFenster()?.contentDocument
+      const sicht = flaeche.current
+      if (!dok?.querySelector('.pagedjs_page') || !sicht) return null
+      const mass = getComputedStyle(dok.documentElement)
+      const breite = laengePx(mass.getPropertyValue('--pagedjs-width')) ?? 794
+      const hoehe = laengePx(mass.getPropertyValue('--pagedjs-height')) ?? 1123
+      // Rand links/rechts und Bildlaufleiste, oben/unten der Abstand der Seiten (6 mm, vorschau.css)
+      const z = (sicht.clientWidth - 40) / breite
+      const ganz = art === 'seite' ? Math.min(z, (sicht.clientHeight - 2 * 23) / hoehe) : z
+      return Math.floor(ganz * 10) / 10
+    },
+    statistik(genau) {
+      const seiten = aktivesFenster()?.contentDocument?.querySelector('.pagedjs_pages')
+      if (!seiten) return null
+      // Nur der Textbereich der Seiten: ohne Kopf-/Fußzeilen (Seitenzahlen), Markierungen und Griffe
+      // Textknoten einzeln: textContent klebt Wörter benachbarter Absätze aneinander
+      const teile: string[] = []
+      for (const bereich of seiten.querySelectorAll('.pagedjs_area')) {
+        const gang = bereich.ownerDocument.createTreeWalker(bereich, NodeFilter.SHOW_TEXT)
+        for (let n = gang.nextNode(); n; n = gang.nextNode()) teile.push(n.nodeValue ?? '')
+      }
+      const text = teile.join(' ')
+      const woerter = text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length
+      if (!genau) return { woerter, zeichen: 0, zeichenOhneLeerzeichen: 0, absaetze: 0, zeilen: 0 }
+      const absaetze = [...seiten.querySelectorAll<HTMLElement>('.pagedjs_area :is(p, li, h1, h2, h3, h4, h5, h6, th, td, pre, figcaption)')].filter(
+        (el) => (el.textContent ?? '').trim() && !el.querySelector('p, li'),
+      )
+      return {
+        woerter,
+        zeichen: text.replace(/\s+/g, ' ').trim().length,
+        zeichenOhneLeerzeichen: text.replace(/\s+/g, '').length,
+        // Fortsetzungen geteilter Absätze zählen nicht doppelt
+        absaetze: absaetze.filter((el) => !el.hasAttribute('data-split-from')).length,
+        zeilen: absaetze.reduce((summe, el) => {
+          const zeile = parseFloat(getComputedStyle(el).lineHeight)
+          return summe + (zeile > 0 ? Math.max(1, Math.round(el.getBoundingClientRect().height / zeile / aktuell.current.zoom)) : 1)
+        }, 0),
+      }
+    },
+    linealMass() {
+      const fenster = aktivesFenster()?.contentWindow
+      const dok = fenster?.document
+      const seiten = [...(dok?.querySelectorAll<HTMLElement>('.pagedjs_page') ?? [])]
+      if (!fenster || !dok || seiten.length === 0) return null
+      const mitte = fenster.innerHeight / 2
+      const seite = seiten.find((s) => s.getBoundingClientRect().bottom > mitte) ?? seiten.at(-1)!
+      const inhalt = seite.querySelector<HTMLElement>('.pagedjs_area') ?? seite
+      const r = seite.getBoundingClientRect()
+      const t = inhalt.getBoundingClientRect()
+      const breiteMm = ((laengePx(getComputedStyle(dok.documentElement).getPropertyValue('--pagedjs-width')) ?? 794) * 25.4) / 96
+      return { seiteLinks: r.left, seiteBreite: r.width, textLinks: t.left, textBreite: t.width, breiteMm }
+    },
+    fenster() {
+      return aktivesFenster()?.contentWindow ?? null
     },
   }))
 
@@ -471,9 +553,9 @@ export function Vorschau(p: Props) {
   // Auswahl, Zoom und Formatierungszeichen ohne neuen Umbruch anwenden
   useEffect(() => {
     const dok = aktivesFenster()?.contentDocument
-    if (dok?.querySelector('.pagedjs_pages')) ansichtAnwenden(dok, { auswahl, zeichen, zoom })
+    if (dok?.querySelector('.pagedjs_pages')) ansichtAnwenden(dok, { auswahl, zeichen, zoom, dunkel })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auswahl, zeichen, zoom, aktiv])
+  }, [auswahl, zeichen, zoom, aktiv, dunkel])
 
   // Suchen ohne neuen Umbruch; neuer Begriff = Treffer neu sammeln, neuer aktiver Treffer = hinscrollen
   useEffect(() => {
@@ -499,9 +581,18 @@ export function Vorschau(p: Props) {
   )
 }
 
-function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: boolean; zoom: number }) {
+/** CSS-Länge wie „210mm“ oder „8.5in“ in Pixel (96 dpi) */
+function laengePx(wert: string): number | null {
+  const m = wert.trim().match(/^([\d.]+)(mm|cm|in|px|pt)$/)
+  if (!m) return null
+  const faktor = { mm: 96 / 25.4, cm: 96 / 2.54, in: 96, px: 1, pt: 96 / 72 }[m[2] as 'mm']
+  return Number(m[1]) * faktor
+}
+
+function ansichtAnwenden(dok: Document, a: { auswahl: string | null; zeichen: boolean; zoom: number; dunkel: boolean }) {
   const seiten = dok.querySelector<HTMLElement>('.pagedjs_pages')
   if (seiten) seiten.style.zoom = String(a.zoom)
+  dok.documentElement.classList.toggle('dunkel', a.dunkel)
   dok.body.classList.toggle('zeichen', a.zeichen)
   auswahlZeigen(dok, a.auswahl)
 }

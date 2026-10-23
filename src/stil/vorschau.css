@@ -6,6 +6,11 @@
     background: #e6e6e6 !important;
     margin: 0;
   }
+  /* Dunkles Office-Design: nur die Fläche um die Seiten, die Seiten bleiben weiß wie auf Papier */
+  html.dunkel,
+  html.dunkel body {
+    background: #1f1f1f !important;
+  }
   .pagedjs_pages {
     display: flex;
     flex-direction: column;

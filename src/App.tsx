@@ -1,4 +1,4 @@
-// Oberfläche wie in Word: Titelleiste, Menüband, Navigationsbereich, Seiten, Hinweise, Statusleiste.
+// Oberfläche wie im modernen Word: Titelleiste mit Suche, Menüband, Navigationsbereich, Seiten, Hinweise, Statusleiste.
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -12,6 +12,7 @@ import {
   eintragAendern,
   eintragAnIndex,
   eintragLoeschen,
+  eintragZuruecksetzen,
   eintragZuweisen,
   layoutZuruecksetzen,
   notizSchriftSetzen,
@@ -24,7 +25,7 @@ import {
   umbruchUmschalten,
   umflussPosition,
 } from './layout/bearbeiten'
-import { type LayoutDatei, type LayoutEintrag, layoutSpeichern } from './layout/layoutDatei'
+import { type LayoutDatei, type LayoutEintrag, STANDARD_SCHRIFT_PT, layoutSpeichern } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
 import {
   type Mappe,
@@ -45,20 +46,55 @@ import {
 } from './mappen/mappen'
 import { type VaultEinstellungen, vaultEinstellungenLaden } from './stil/stil'
 import { ZOOM_MAX, ZOOM_MIN, zahlText } from './ui/Band'
-import { Datei } from './ui/Datei'
+import {
+  BookOpenText,
+  Droplet,
+  EyeOff,
+  FilePlus2,
+  FileX2,
+  FolderOpen,
+  Focus,
+  Keyboard,
+  ListTree,
+  Maximize2,
+  MessageSquareWarning,
+  Moon,
+  MoveHorizontal,
+  PanelTop,
+  Pilcrow,
+  Printer,
+  Redo2,
+  RefreshCw,
+  RotateCcw,
+  Ruler,
+  Search,
+  SeparatorHorizontal,
+  Settings,
+  Square,
+  Sun,
+  Undo2,
+  WandSparkles,
+} from 'lucide-react'
+import { type Befehl, Befehlssuche } from './ui/Befehlssuche'
+import { type DateiSeite, Datei } from './ui/Datei'
+import { Tastenkombinationen, Wortanzahl } from './ui/Dialoge'
 import { Hinweise } from './ui/Hinweise'
 import { Kontextmenue } from './ui/Kontextmenue'
+import { Lineal } from './ui/Lineal'
 import { Menueband, type Reiter } from './ui/Menueband'
 import { Mappenreiter } from './ui/Mappenreiter'
 import { type NavAnsicht, Navigationsbereich } from './ui/Navigationsbereich'
+import { useOberflaeche } from './ui/oberflaeche'
+import { QuickInfo } from './ui/QuickInfo'
 import { Statusleiste } from './ui/Statusleiste'
 import { Titelleiste } from './ui/Titelleiste'
+import { type ZugriffstastenSteuerung, Zugriffstasten } from './ui/Zugriffstasten'
 import { demoVault } from './vault/demoVault'
 import { type Notiz, notizenLaden } from './vault/notizen'
 import { gemerktenOrdnerOeffnen, gemerkterOrdnerName, ordnerWaehlen, ordnerZugriffMoeglich } from './vault/ordnerVault'
 import { type Vault, notizName } from './vault/vault'
 import type { Rueckrufe } from './vorschau/interaktion'
-import { type Fertig, Vorschau, type VorschauSteuerung } from './vorschau/Vorschau'
+import { type Fertig, type Statistik, Vorschau, type VorschauSteuerung } from './vorschau/Vorschau'
 import { type Leerraum, leerraumText } from './vorschau/leerraum'
 import type { Treffer } from './vorschau/suche'
 
@@ -94,10 +130,21 @@ type Aendern = (e: LayoutEintrag) => LayoutEintrag
 
 const MAX_VERLAUF = 100
 
+/** Vorschläge der Befehlssuche bei leerem Feld (nach den zuletzt benutzten) */
+const VORSCHLAEGE = ['drucken', 'formatieren', 'umbruch', 'ausblenden', 'woerter', 'tasten']
+
 export function App() {
   const [geladen, setGeladen] = useState<Geladen | null>(null)
   const [gemerkt, setGemerkt] = useState<string | null>(null)
   const [dateiOffen, setDateiOffen] = useState(false)
+  const [dateiSeite, setDateiSeite] = useState<DateiSeite>('start')
+  const [oberflaeche, setOberflaeche, dunkel] = useOberflaeche()
+  // Vollbildmodus: Titelleiste und Menüband kurz eingeblendet („…“ oder Alt)
+  const [kopfOffen, setKopfOffen] = useState(false)
+  const [dialog, setDialog] = useState<'woerter' | 'tasten' | null>(null)
+  const [statistik, setStatistik] = useState<Statistik | null>(null)
+  const [woerter, setWoerter] = useState<number | null>(null)
+  const [zuletzt, setZuletzt] = useState<string[]>(() => listeLesen(speicherLesen('befehle')))
   // Mappen: alle Zusammenstellungen des Vaults, die offenen Reiter und der aktive
   const [mappen, setMappen] = useState<MappenDatei>({ version: 1, mappen: [] })
   const [offen, setOffen] = useState<string[]>([])
@@ -129,13 +176,54 @@ export function App() {
   const [zielSeiten, setZielSeiten] = useState<number | undefined>(undefined)
   const [status, setStatus] = useState<{ laeuft: boolean; text: string | null }>({ laeuft: false, text: null })
   const suchfeld = useRef<HTMLInputElement>(null)
+  const befehlsfeld = useRef<HTMLInputElement>(null)
   const vorschau = useRef<VorschauSteuerung>(null)
+  const zugriffstasten = useRef<ZugriffstastenSteuerung>(null)
 
   // Neuester Stand jeder Layout-Datei – schneller als das neu aufgebaute Dokument, damit schnelle Folgeänderungen nichts verlieren
   const layouts = useRef(new Map<string, LayoutDatei>())
   const [layoutStand, setLayoutStand] = useState(0)
 
   const setZoom = (z: number) => setZoomRoh(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10)))
+  const zoomAendern = (schritt: number) => setZoomRoh((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + schritt) * 10) / 10)))
+
+  function dateiOeffnen(seite: DateiSeite = 'start') {
+    setDateiSeite(seite)
+    setDateiOffen(true)
+  }
+
+  const vollbild = oberflaeche.band === 'vollbild'
+  // Eingeblendeter Kopf im Vollbildmodus verschwindet beim Klick in die Seiten oder daneben
+  useEffect(() => {
+    if (!kopfOffen) return
+    const zu = (e: Event) => {
+      const ziel = e.target as Element | null
+      if (e.type === 'blur' || !ziel?.closest?.('.kopf, .band-menue, .befehlsliste, .namensmenue')) setKopfOffen(false)
+    }
+    window.addEventListener('pointerdown', zu)
+    window.addEventListener('blur', zu)
+    return () => {
+      window.removeEventListener('pointerdown', zu)
+      window.removeEventListener('blur', zu)
+    }
+  }, [kopfOffen])
+  useEffect(() => {
+    if (!vollbild) setKopfOffen(false)
+  }, [vollbild])
+
+  function befehlssucheOeffnen() {
+    if (vollbild) setKopfOffen(true)
+    setTimeout(() => {
+      befehlsfeld.current?.focus()
+      befehlsfeld.current?.select()
+    }, 0)
+  }
+
+  function befehlBenutzt(id: string) {
+    const neu = [id, ...zuletzt.filter((z) => z !== id)].slice(0, 5)
+    setZuletzt(neu)
+    speicherSchreiben('befehle', JSON.stringify(neu))
+  }
 
   async function versuchen(aktion: () => Promise<void>) {
     try {
@@ -610,6 +698,8 @@ export function App() {
 
   function fertig(f: Fertig) {
     setSeiten(f.seiten)
+    // erst nach dem Umschalten auf die neue Fassung zählen
+    setTimeout(() => setWoerter(vorschau.current?.statistik(false)?.woerter ?? null), 0)
     setLeerraum(f.leerraum)
     setFassung((n) => n + 1)
     if (druckenWennFertig.current) {
@@ -683,11 +773,18 @@ export function App() {
 
   const taste = useRef<(e: KeyboardEvent) => void>(() => {})
   taste.current = (e: KeyboardEvent) => {
+    // Zugriffstasten (Alt) zuerst: solange sie angezeigt werden, gehören ihnen alle Tasten
+    if (zugriffstasten.current?.taste(e) || e.type !== 'keydown') return
     const imFeld = (e.target as HTMLElement | null)?.closest?.('input, textarea')
     const strg = e.ctrlKey || e.metaKey
     const k = e.key.toLowerCase()
     let erledigt = true
     if (k === 'f5') aktualisieren()
+    else if (e.altKey && !strg && k === 'q') befehlssucheOeffnen()
+    else if (strg && k === 'f1') setOberflaeche({ band: oberflaeche.band === 'immer' ? 'register' : 'immer' })
+    else if (strg && k === '0') setZoom(1)
+    else if (strg && (k === '+' || k === '=')) zoomAendern(0.1)
+    else if (strg && k === '-') zoomAendern(-0.1)
     else if (strg && k === 'p') drucken()
     else if (strg && k === 'f') sucheOeffnen()
     else if (k === 'f3') trefferWechseln(e.shiftKey ? -1 : 1)
@@ -706,7 +803,11 @@ export function App() {
   useEffect(() => {
     const weiter = (e: KeyboardEvent) => taste.current(e)
     window.addEventListener('keydown', weiter)
-    return () => window.removeEventListener('keydown', weiter)
+    window.addEventListener('keyup', weiter)
+    return () => {
+      window.removeEventListener('keydown', weiter)
+      window.removeEventListener('keyup', weiter)
+    }
   }, [])
 
   const rueckrufe: Rueckrufe = {
@@ -725,6 +826,7 @@ export function App() {
     tabelleSpalten: (id, prozent) => blockAendern(id, tabelleSetzen({ columnsPct: prozent })),
     tabelleBreite: (id, prozent) => blockAendern(id, tabellenBreiteSetzen(prozent)),
     taste: (e) => taste.current(e),
+    zoomRad: (deltaY) => zoomAendern(deltaY < 0 ? 0.1 : -0.1),
     seite: setSeite,
     leerraum: (i) => leerraum[i] && leerraumBeheben(leerraum[i]),
     einbettung: (notiz, ziel) => einbettungUmschalten(notiz, ziel, true),
@@ -740,6 +842,12 @@ export function App() {
   if (!geladen || dateiOffen) {
     return (
       <Datei
+        seite={dateiSeite}
+        onSeite={setDateiSeite}
+        oberflaeche={oberflaeche}
+        onOberflaeche={setOberflaeche}
+        mappe={aktiveMappe}
+        seiten={dokument ? seiten : 0}
         vaultName={geladen?.vault.name ?? null}
         gemerkt={gemerkt}
         theme={geladen?.einstellungen.theme ?? null}
@@ -788,68 +896,141 @@ export function App() {
     aktuelleNotiz && layoutAendern(aktuelleNotiz.pfad, (l) => notizSchriftSetzen(l, teil))
   const offeneMappen = offen.map((id) => mappen.mappen.find((m) => m.id === id)).filter((m) => m !== undefined)
   const kontextBlock = kontext ? blockSuchen(kontext.id) : null
+  const zoomAuf = (art: 'breite' | 'seite') => {
+    const z = vorschau.current?.zoomFuer(art)
+    if (z) setZoom(z)
+  }
+  const woerterZaehlen = () => {
+    setStatistik(vorschau.current?.statistik(true) ?? null)
+    setDialog('woerter')
+  }
+
+  // Alles, was die Suche in der Titelleiste (Alt+Q) findet – wie „Microsoft Search“ in Word
+  const ohneDok = !dokument
+  const befehle: Befehl[] = [
+    { id: 'drucken', text: 'Drucken / als PDF speichern', symbol: Printer, ort: 'Datei', taste: 'Strg+P', aktion: drucken, gesperrt: ohneDok, stichworte: 'pdf export' },
+    { id: 'zurueck', text: 'Rückgängig', symbol: Undo2, ort: 'Start', taste: 'Strg+Z', aktion: zurueck, gesperrt: verlauf.zurueck.length === 0 },
+    { id: 'vor', text: 'Wiederholen', symbol: Redo2, ort: 'Start', taste: 'Strg+Y', aktion: vor, gesperrt: verlauf.vor.length === 0 },
+    { id: 'umbruch', text: 'Seitenumbruch vor dem Block', symbol: SeparatorHorizontal, ort: 'Layout', taste: 'Strg+Enter', aktion: () => blockAendern(auswahl, umbruchUmschalten(true)), gesperrt: !gewaehlt, stichworte: 'neue seite' },
+    { id: 'ausblenden', text: 'Block im Druck ausblenden', symbol: EyeOff, ort: 'Start', taste: 'Entf', aktion: () => blockAendern(auswahl, ausblendenSetzen(true)), gesperrt: !gewaehlt, stichworte: 'verstecken entfernen weglassen' },
+    { id: 'block-zuruecksetzen', text: 'Block zurücksetzen', symbol: RotateCcw, ort: 'Start', aktion: () => blockAendern(auswahl, eintragZuruecksetzen), gesperrt: !gewaehlt?.eintrag },
+    { id: 'teilen', text: 'Teilen über Seiten erlauben', symbol: SeparatorHorizontal, ort: 'Layout', aktion: () => blockAendern(auswahl, teilenSetzen(true)), gesperrt: !gewaehlt || !['heading', 'list', 'callout', 'code'].includes(gewaehlt.block.typ), stichworte: 'umbruch abschnitt' },
+    { id: 'formatieren', text: 'Automatisch formatieren', symbol: WandSparkles, ort: 'Layout', aktion: () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)), gesperrt: ohneDok || status.laeuft, stichworte: 'seiten passen schrift kleiner' },
+    { id: 'tinte', text: aktiveMappe?.inkSaving ? 'Tinte sparen ausschalten' : 'Tinte sparen', symbol: Droplet, ort: 'Layout', aktion: () => aktiveMappeAendern(tinteSparenSetzen(!aktiveMappe?.inkSaving)), gesperrt: ohneDok, stichworte: 'graustufen farbe' },
+    { id: 'seite-zuruecksetzen', text: `Seite ${aktuelleSeite()} zurücksetzen`, symbol: FileX2, ort: 'Layout', aktion: seiteZuruecksetzen, gesperrt: ohneDok },
+    { id: 'alles-zuruecksetzen', text: 'Alles zurücksetzen', symbol: RotateCcw, ort: 'Layout', aktion: allesZuruecksetzen, gesperrt: ohneDok },
+    { id: 'suchen', text: 'Im Dokument suchen', symbol: Search, ort: 'Start', taste: 'Strg+F', aktion: sucheOeffnen, stichworte: 'finden' },
+    { id: 'aktualisieren', text: 'Vault aktualisieren', symbol: RefreshCw, ort: 'Ansicht', taste: 'F5', aktion: aktualisieren, stichworte: 'neu laden einlesen' },
+    { id: 'hinweise', text: hinweiseOffen ? 'Hinweise ausblenden' : 'Hinweise anzeigen', symbol: MessageSquareWarning, ort: 'Überprüfen', aktion: () => setHinweiseOffen(!hinweiseOffen), stichworte: 'fehler probleme prüfen' },
+    { id: 'woerter', text: 'Wörter zählen', symbol: BookOpenText, ort: 'Überprüfen', aktion: woerterZaehlen, gesperrt: ohneDok, stichworte: 'wortanzahl zeichen statistik' },
+    { id: 'zeichen', text: zeichen ? 'Umbrüche ausblenden' : 'Umbrüche zeigen', symbol: Pilcrow, ort: 'Ansicht', aktion: () => setZeichen(!zeichen), stichworte: 'formatierungszeichen' },
+    { id: 'navigation', text: nav ? 'Navigationsbereich ausblenden' : 'Navigationsbereich anzeigen', symbol: ListTree, ort: 'Ansicht', aktion: () => setNav(!nav), stichworte: 'seitenleiste gliederung überschriften' },
+    { id: 'lineal', text: oberflaeche.lineal ? 'Lineal ausblenden' : 'Lineal anzeigen', symbol: Ruler, ort: 'Ansicht', aktion: () => setOberflaeche({ lineal: !oberflaeche.lineal }), stichworte: 'ränder' },
+    { id: 'fokus', text: vollbild ? 'Fokus beenden' : 'Fokus (Vollbildmodus)', symbol: Focus, ort: 'Ansicht', aktion: () => setOberflaeche({ band: vollbild ? 'immer' : 'vollbild' }), stichworte: 'menüband ausblenden' },
+    { id: 'band', text: oberflaeche.band === 'register' ? 'Menüband immer anzeigen' : 'Nur Registerkarten anzeigen', symbol: PanelTop, ort: 'Ansicht', taste: 'Strg+F1', aktion: () => setOberflaeche({ band: oberflaeche.band === 'register' ? 'immer' : 'register' }), stichworte: 'menüband reduzieren' },
+    { id: 'zoom-100', text: 'Zoom 100 %', symbol: Maximize2, ort: 'Ansicht', taste: 'Strg+0', aktion: () => setZoom(1) },
+    { id: 'zoom-seite', text: 'Zoom: eine Seite', symbol: Square, ort: 'Ansicht', aktion: () => zoomAuf('seite'), gesperrt: ohneDok },
+    { id: 'zoom-breite', text: 'Zoom: Seitenbreite', symbol: MoveHorizontal, ort: 'Ansicht', aktion: () => zoomAuf('breite'), gesperrt: ohneDok },
+    { id: 'design-dunkel', text: 'Dunkles Design', symbol: Moon, ort: 'Optionen', aktion: () => setOberflaeche({ design: 'dunkelgrau' }), stichworte: 'dunkel dark mode office-design schwarz' },
+    { id: 'design-hell', text: 'Helles Design', symbol: Sun, ort: 'Optionen', aktion: () => setOberflaeche({ design: 'weiss' }), stichworte: 'hell light mode office-design weiß' },
+    { id: 'optionen', text: 'Optionen', symbol: Settings, ort: 'Datei', aktion: () => dateiOeffnen('optionen'), stichworte: 'einstellungen design schnellzugriff' },
+    { id: 'tasten', text: 'Tastenkombinationen', symbol: Keyboard, ort: 'Hilfe', aktion: () => setDialog('tasten'), stichworte: 'tastenkürzel hilfe shortcuts' },
+    { id: 'neue-mappe', text: 'Neue Mappe', symbol: FilePlus2, ort: 'Datei', aktion: () => neueMappeAnlegen(), stichworte: 'neu dokument' },
+    { id: 'oeffnen', text: 'Vault öffnen', symbol: FolderOpen, ort: 'Datei', aktion: () => dateiOeffnen('oeffnen'), stichworte: 'ordner' },
+  ]
 
   return (
-    <div className={`app${nav ? ' mit-nav' : ''}${hinweiseOffen ? ' mit-hinweisen' : ''}`}>
-      <Titelleiste
-        titel={aktiveMappe?.name ?? geladen.vault.name}
-        speichert={speichert > 0}
-        kannZurueck={verlauf.zurueck.length > 0}
-        kannVor={verlauf.vor.length > 0}
-        zurueck={zurueck}
-        vor={vor}
-        drucken={drucken}
-      />
-      <Menueband
-        reiter={reiter}
-        onReiter={setReiter}
-        onDatei={() => setDateiOffen(true)}
-        kannZurueck={verlauf.zurueck.length > 0}
-        kannVor={verlauf.vor.length > 0}
-        zurueck={zurueck}
-        vor={vor}
-        drucken={drucken}
-        aktualisieren={aktualisieren}
-        auswahlSchrift={
-          gewaehlt
-            ? { fuer: gewaehlt.beschreibung, fontSizePt: gewaehlt.eintrag?.fontSizePt, lineHeight: gewaehlt.eintrag?.lineHeight }
-            : aktuelleNotiz
-              ? { fuer: `Notiz „${aktuelleNotiz.titel}“`, ...notizSchrift }
-              : null
-        }
-        onAuswahlSchrift={(teil) => (gewaehlt ? blockAendern(auswahl, schriftSetzen(teil)) : notizSchriftAendern(teil))}
-        notizName={aktuelleNotiz?.titel ?? null}
-        notizSchrift={notizSchrift}
-        onNotizSchrift={notizSchriftAendern}
-        notizHatLayout={!!notizLayout && JSON.stringify(layoutZuruecksetzen(notizLayout)) !== JSON.stringify(notizLayout)}
-        notizZuruecksetzen={() =>
-          aktuelleNotiz &&
-          confirm(`Alle manuellen Änderungen in „${aktuelleNotiz.titel}“ verwerfen? (Rückgängig ist möglich)`) &&
-          layoutAendern(aktuelleNotiz.pfad, layoutZuruecksetzen)
-        }
-        block={gewaehlt ? { typ: gewaehlt.block.typ, beschreibung: gewaehlt.beschreibung, eintrag: gewaehlt.eintrag } : null}
-        blockAendern={(aendern) => blockAendern(auswahl, aendern)}
-        bildIstMm={bildIstMm}
-        zoom={zoom}
-        onZoom={setZoom}
-        nav={nav}
-        onNav={setNav}
-        hinweise={hinweiseOffen}
-        onHinweise={setHinweiseOffen}
-        zeichen={zeichen}
-        onZeichen={setZeichen}
-        tinteSparen={!!aktiveMappe?.inkSaving}
-        onTinteSparen={(an) => aktiveMappeAendern(tinteSparenSetzen(an))}
-        seiten={seiten}
-        zielSeiten={zielSeiten}
-        onZielSeiten={setZielSeiten}
-        formatieren={dokument ? () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)) : null}
-        formatiertLaeuft={status.laeuft}
-        onSuche={sucheOeffnen}
-        seiteZuruecksetzen={dokument ? seiteZuruecksetzen : null}
-        seiteNummer={aktuelleSeite()}
-        allesZuruecksetzen={dokument ? allesZuruecksetzen : null}
-      />
+    <div className={`app${nav ? ' mit-nav' : ''}${hinweiseOffen ? ' mit-hinweisen' : ''}${vollbild ? ' vollbild' : ''}${kopfOffen ? ' kopf-offen' : ''}`}>
+      <div className="kopf">
+        <Titelleiste
+          titel={aktiveMappe?.name ?? geladen.vault.name}
+          onUmbenennen={aktiveMappe ? (name) => mappenAendern((d) => mappeAendern(d, aktiveMappe.id, umbenennen(name))) : null}
+          vaultName={geladen.vault.name}
+          speichert={speichert > 0}
+          schnellzugriff={oberflaeche.schnellzugriff}
+          kannZurueck={verlauf.zurueck.length > 0}
+          kannVor={verlauf.vor.length > 0}
+          zurueck={zurueck}
+          vor={vor}
+          drucken={drucken}
+          onDatei={() => dateiOeffnen()}
+          suche={
+            <Befehlssuche
+              feld={befehlsfeld}
+              befehle={befehle}
+              vorschlaege={[...zuletzt, ...VORSCHLAEGE]}
+              notizen={geladen.notizen}
+              onNotiz={notizKlick}
+              onImDokument={(begriff) => {
+                suchen(begriff)
+                sucheOeffnen()
+              }}
+              onBenutzt={befehlBenutzt}
+            />
+          }
+        />
+        <Menueband
+          reiter={reiter}
+          onReiter={setReiter}
+          onDatei={() => dateiOeffnen()}
+          kannZurueck={verlauf.zurueck.length > 0}
+          kannVor={verlauf.vor.length > 0}
+          zurueck={zurueck}
+          vor={vor}
+          drucken={drucken}
+          aktualisieren={aktualisieren}
+          auswahlSchrift={
+            gewaehlt
+              ? { fuer: gewaehlt.beschreibung, fontSizePt: gewaehlt.eintrag?.fontSizePt, lineHeight: gewaehlt.eintrag?.lineHeight }
+              : aktuelleNotiz
+                ? { fuer: `Notiz „${aktuelleNotiz.titel}“`, ...notizSchrift }
+                : null
+          }
+          onAuswahlSchrift={(teil) => (gewaehlt ? blockAendern(auswahl, schriftSetzen(teil)) : notizSchriftAendern(teil))}
+          notizName={aktuelleNotiz?.titel ?? null}
+          notizSchrift={notizSchrift}
+          onNotizSchrift={notizSchriftAendern}
+          notizHatLayout={!!notizLayout && JSON.stringify(layoutZuruecksetzen(notizLayout)) !== JSON.stringify(notizLayout)}
+          notizZuruecksetzen={() =>
+            aktuelleNotiz &&
+            confirm(`Alle manuellen Änderungen in „${aktuelleNotiz.titel}“ verwerfen? (Rückgängig ist möglich)`) &&
+            layoutAendern(aktuelleNotiz.pfad, layoutZuruecksetzen)
+          }
+          block={gewaehlt ? { typ: gewaehlt.block.typ, beschreibung: gewaehlt.beschreibung, eintrag: gewaehlt.eintrag } : null}
+          blockAendern={(aendern) => blockAendern(auswahl, aendern)}
+          bildIstMm={bildIstMm}
+          zoom={zoom}
+          onZoom={setZoom}
+          nav={nav}
+          onNav={setNav}
+          hinweise={hinweiseOffen}
+          onHinweise={setHinweiseOffen}
+          zeichen={zeichen}
+          onZeichen={setZeichen}
+          tinteSparen={!!aktiveMappe?.inkSaving}
+          onTinteSparen={(an) => aktiveMappeAendern(tinteSparenSetzen(an))}
+          seiten={seiten}
+          zielSeiten={zielSeiten}
+          onZielSeiten={setZielSeiten}
+          formatieren={dokument ? () => automatischFormatieren(zielSeiten ?? Math.max(1, seiten - 1)) : null}
+          formatiertLaeuft={status.laeuft}
+          onSuche={sucheOeffnen}
+          seiteZuruecksetzen={dokument ? seiteZuruecksetzen : null}
+          seiteNummer={aktuelleSeite()}
+          allesZuruecksetzen={dokument ? allesZuruecksetzen : null}
+          zoomFuer={(art) => vorschau.current?.zoomFuer(art) ?? null}
+          probleme={probleme}
+          bandAnzeige={oberflaeche.band}
+          onBandAnzeige={(band) => setOberflaeche({ band })}
+          schnellzugriff={oberflaeche.schnellzugriff}
+          onSchnellzugriff={(schnellzugriff) => setOberflaeche({ schnellzugriff })}
+          lineal={oberflaeche.lineal}
+          onLineal={(lineal) => setOberflaeche({ lineal })}
+          onWoerter={woerterZaehlen}
+          onTastenkuerzel={() => setDialog('tasten')}
+          onOptionen={() => dateiOeffnen('optionen')}
+        />
+      </div>
 
       {nav && (
         <Navigationsbereich
@@ -894,7 +1075,19 @@ export function App() {
           onNeu={() => neueMappeAnlegen()}
           onUmbenennen={(id, name) => mappenAendern((d) => mappeAendern(d, id, umbenennen(name)))}
         />
+        {vollbild && !kopfOffen && (
+          <button className="kopf-zeigen" onClick={() => setKopfOffen(true)} aria-label="Menüband anzeigen" title="Menüband anzeigen">
+            …
+          </button>
+        )}
         {fehler && <div className="fehlerleiste">{fehler}</div>}
+        {dokument && oberflaeche.lineal && (
+          <Lineal
+            messen={() => vorschau.current?.linealMass() ?? null}
+            fenster={() => vorschau.current?.fenster() ?? null}
+            stand={`${fassung}|${zoom}|${nav}|${hinweiseOffen}`}
+          />
+        )}
         {dokument ? (
           <Vorschau
             ref={vorschau}
@@ -906,6 +1099,7 @@ export function App() {
             zeichen={zeichen}
             baut={baut || status.laeuft}
             tinteSparen={!!aktiveMappe?.inkSaving}
+            dunkel={dunkel}
             suche={suche}
             trefferAktiv={trefferAktiv}
             onTreffer={(t) => {
@@ -944,9 +1138,17 @@ export function App() {
         seite={seite}
         seiten={seiten}
         notizen={dokument?.notizen.length ?? 0}
+        woerter={dokument ? woerter : null}
         probleme={probleme}
         meldung={zuweisen ? 'Block anklicken, dem der Layout-Eintrag zugewiesen wird – Esc bricht ab' : status.text}
+        onSeiten={() => {
+          setNav(true)
+          setNavAnsicht('seiten')
+        }}
+        onWoerter={woerterZaehlen}
         onHinweise={() => setHinweiseOffen(!hinweiseOffen)}
+        fokus={vollbild}
+        onFokus={() => setOberflaeche({ band: vollbild ? 'immer' : 'vollbild' })}
         zoom={zoom}
         onZoom={setZoom}
       />
@@ -957,10 +1159,18 @@ export function App() {
           y={kontext.y}
           typ={kontextBlock.block.typ}
           eintrag={kontextBlock.index !== undefined ? layoutVon(kontextBlock.teil).items[kontextBlock.index] : undefined}
+          grundschriftPt={layoutVon(kontextBlock.teil).settings.fontSizePt ?? STANDARD_SCHRIFT_PT}
           blockAendern={(aendern) => blockAendern(kontext.id, aendern)}
           onSchliessen={() => setKontext(null)}
         />
       )}
+
+      {dialog === 'woerter' && (
+        <Wortanzahl statistik={statistik} seiten={seiten} notizen={dokument?.notizen.length ?? 0} onSchliessen={() => setDialog(null)} />
+      )}
+      {dialog === 'tasten' && <Tastenkombinationen onSchliessen={() => setDialog(null)} />}
+      <Zugriffstasten ref={zugriffstasten} onStart={() => vollbild && setKopfOffen(true)} />
+      <QuickInfo />
     </div>
   )
 }

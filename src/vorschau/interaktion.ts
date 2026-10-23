@@ -24,7 +24,10 @@ export interface Rueckrufe {
   bildVerschieben(id: string, ausrichtung: Ausrichtung, versatzMm: number, bezug?: Bezug): void
   tabelleSpalten(id: string, prozent: number[]): void
   tabelleBreite(id: string, prozent: number): void
+  /** keydown und keyup (Alt allein zeigt die Zugriffstasten) */
   taste(e: KeyboardEvent): void
+  /** Strg+Mausrad: Zoom ändern (deltaY wie beim Rad) */
+  zoomRad(deltaY: number): void
   seite(nummer: number): void
   /** Knopf in der Leerraum-Markierung (Index in der Liste aus leerraumFinden) */
   leerraum(index: number): void
@@ -93,6 +96,16 @@ export function einrichten(iframe: HTMLIFrameElement, rueckrufe: () => Rueckrufe
   })
 
   dok.addEventListener('keydown', (e) => rueckrufe().taste(e))
+  dok.addEventListener('keyup', (e) => rueckrufe().taste(e))
+  dok.addEventListener(
+    'wheel',
+    (e) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      rueckrufe().zoomRad(e.deltaY)
+    },
+    { passive: false },
+  )
 
   fenster.addEventListener('scroll', () => {
     const mitte = fenster.innerHeight / 2
