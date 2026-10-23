@@ -73,6 +73,10 @@ und meldet nur Absichten an die App; jede Layout-Änderung läuft über die rein
   `image.before` verankert das Bild an einem Block desselben Abschnitts (beim Ziehen gesetzt).
   Tabellen können dasselbe (`table.wrap`, `offsetYMm`, `wrapGapMm`, `before`; Breite bleibt `widthPct`):
   `objektSetzen`/`umfliessenSetzen(an, art)` in `bearbeiten.ts`. Eine umfließende Tabelle wird nie geteilt.
+- Eingerückte Bilder und Tabellen (in Listen, Callouts, Zitaten) sind eigene Blöcke im Block darum (`eingerueckt`
+  in `bloecke.ts`): erst nach allen anderen Blöcken gezählt und angehängt, damit vorhandene Anker gleich bleiben.
+  Bildzeilen werden auch dort zu `figure.bild-block` (auch Text direkt im `li` enger Listen). Mit Textumbruch
+  umschließt der Listenpunkt das Objekt (`.umfluss-huelle`); verschoben wird es nur innerhalb seines Blocks.
 - Suchen und Ausblenden: Regeln der Mappe (`hideSections`, Überschrift enthält den Begriff) wendet `layoutAnwenden`
   an, mit Hinweis je Abschnitt. Einblenden trotz Regel = `hidden: false` im Layout (`ausblendenSetzen(wert, regel)`);
   in der App immer über `sichtbarkeitSetzen`, das die Regel prüft.

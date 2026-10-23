@@ -231,6 +231,9 @@ table.umfliessen[data-ausrichtung='left'] ~ ol {
   display: flow-root;
 }
 section::after { content: ''; display: block; clear: both; }
+/* Eingerücktes Bild bzw. eingerückte Tabelle mit Textumbruch bleibt in ihrem Listenpunkt, Callout oder Zitat */
+.umfluss-huelle { display: flow-root; }
+li.umfluss-huelle { display: flow-root list-item; }
 
 .mermaid-diagramm svg {
   max-width: 100%;

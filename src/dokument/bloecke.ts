@@ -12,6 +12,8 @@ export interface Block {
   hash: string // Prüfsumme des normalisierten Texts
   bild?: string // Dateiname bei Bildern
   text: string // normalisierter Text, für die Ähnlichkeitsprüfung
+  /** Bild oder Tabelle innerhalb eines anderen Blocks (Liste, Callout, Zitat) */
+  eingerueckt?: boolean
 }
 
 interface Gegliedert {
@@ -93,6 +95,28 @@ export function gliedern(wurzel: HTMLElement, dateiname: string, praefix: string
     el.setAttribute('data-block', id)
     bloecke.push({ id, pfad: blockPfad, typ, index, hash: bildname ?? pruefsumme(text), bild: bildname, text })
   }
+  // Eingerückte Bilder und Tabellen (in Listen, Callouts, Zitaten) sind eigene Blöcke im Block darum: Größe,
+  // Ausrichtung, Textumbruch wie oben. Erst nach allen anderen gezählt und angehängt, damit die Anker der
+  // bisherigen Blöcke (index) gleich bleiben und blockFinden bei gleichem Index die nicht eingerückten zuerst findet.
+  for (const aussen of bloecke.slice()) {
+    if (aussen.typ === 'image' || aussen.typ === 'table' || aussen.typ === 'heading') continue
+    const el = wurzel.querySelector<HTMLElement>(`[data-block="${aussen.id}"]`)
+    // Eingefügte Notizen bleiben ein Block am Stück
+    if (!el || el.classList.contains('einbettung-inhalt')) continue
+    for (const innen of el.querySelectorAll<HTMLElement>('figure.bild-block, table')) {
+      // Bilder in Tabellenzellen bleiben Teil der Tabelle
+      if (innen.parentElement?.closest('td, th')) continue
+      const typ: BlockTyp = innen.tagName === 'TABLE' ? 'table' : 'image'
+      const bildname = typ === 'image' ? innen.querySelector('img')?.getAttribute('data-bild') ?? '' : undefined
+      const text = normalisieren(innen.textContent ?? '')
+      const schluessel = aussen.pfad.join('>') + '|' + typ
+      const index = zaehler.get(schluessel) ?? 0
+      zaehler.set(schluessel, index + 1)
+      const id = `${praefix}-${bloecke.length}`
+      innen.setAttribute('data-block', id)
+      bloecke.push({ id, pfad: aussen.pfad, typ, index, hash: bildname ?? pruefsumme(text), bild: bildname, text, eingerueckt: true })
+    }
+  }
   // Export-Anweisung: „Ein Kapitel ohne ###-Abschnitte behandelst du als Ganzes wie einen Abschnitt.“
   for (const kapitel of wurzel.querySelectorAll('section.kapitel')) {
     if (!kapitel.querySelector(':scope > section.abschnitt')) kapitel.classList.add('am-stueck')
@@ -131,6 +155,8 @@ function leereAbsaetzeEntfernen(wurzel: HTMLElement) {
  * Jede Zeile eines Absatzes, die nur aus Bildern besteht, wird zu einer eigenen figure (eigener Block: Größe,
  * Ausrichtung, Ziehen). Eine vollständig kursive Zeile direkt darunter (im selben Absatz nach <br> oder als
  * nächster Absatz) wird zur Beschriftung. Übrige Zeilen bleiben als Absatz stehen, Bilder mitten im Satz auch.
+ * Gilt auch eingerückt: Absätze in Listen, Callouts und Zitaten sowie der Text direkt in einem Listenpunkt
+ * (enge Liste ohne <p>) – Bilder in Tabellenzellen bleiben, wo sie sind.
  */
 function bilderMitBeschriftung(wurzel: HTMLElement) {
   const dok = wurzel.ownerDocument
@@ -144,30 +170,37 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
     figure.append(caption)
   }
 
-  for (const p of [...wurzel.querySelectorAll(':scope > p')] as HTMLElement[]) {
-    if (!p.parentElement) continue // war Beschriftung des vorigen Bildes
+  /**
+   * Inhalt in Zeilen (getrennt durch <br>) zerlegen und Bildzeilen zu figures machen. `absatz`: Textzeilen kommen
+   * in neue <p> (Absatz), sonst bleiben sie lose stehen (Text direkt im Listenpunkt). null: keine Bildzeile.
+   */
+  function zerlegen(knoten: Node[], absatz: boolean): HTMLElement[] | Node[] | null {
     const zeilen: Node[][] = [[]]
-    for (const n of [...p.childNodes]) {
+    for (const n of knoten) {
       if (n.nodeName === 'BR') zeilen.push([])
       else zeilen[zeilen.length - 1].push(n)
     }
-    if (!zeilen.some(nurBilder)) continue
+    if (!zeilen.some(nurBilder)) return null
 
-    const neu: HTMLElement[] = []
+    const neu: Node[] = []
     let text: Node[][] = []
     const textAbschliessen = () => {
       if (text.some((z) => sichtbar(z).length > 0)) {
-        const absatz = dok.createElement('p')
+        const teile: Node[] = []
         text.forEach((z, i) => {
-          if (i > 0) absatz.append(dok.createElement('br'))
-          absatz.append(...z)
+          if (i > 0) teile.push(dok.createElement('br'))
+          teile.push(...z)
         })
-        neu.push(absatz)
+        if (absatz) {
+          const p = dok.createElement('p')
+          p.append(...teile)
+          neu.push(p)
+        } else neu.push(...teile)
       }
       text = []
     }
     for (const zeile of zeilen) {
-      const vorher = neu[neu.length - 1]
+      const vorher = neu[neu.length - 1] as HTMLElement | undefined
       if (nurBilder(zeile)) {
         textAbschliessen()
         for (const img of sichtbar(zeile)) {
@@ -176,14 +209,22 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
           figure.append(img)
           neu.push(figure)
         }
-      } else if (nurKursiv(zeile) && text.length === 0 && vorher?.tagName === 'FIGURE' && !vorher.querySelector('figcaption')) {
+      } else if (nurKursiv(zeile) && text.length === 0 && vorher?.nodeName === 'FIGURE' && !vorher.querySelector('figcaption')) {
         beschriften(vorher, sichtbar(zeile)[0])
       } else {
         text.push(zeile)
       }
     }
     textAbschliessen()
+    return neu
+  }
 
+  const absaetze = wurzel.querySelectorAll<HTMLElement>(':scope > p, li > p, blockquote > p, .callout-content > p')
+  for (const p of [...absaetze]) {
+    // schon Beschriftung des vorigen Bildes; Tabellenzellen und eingefügte Notizen bleiben unverändert
+    if (!p.parentElement || p.closest('td, th, .einbettung-inhalt')) continue
+    const neu = zerlegen([...p.childNodes], true) as HTMLElement[] | null
+    if (!neu) continue
     const letzte = neu[neu.length - 1]
     const naechster = p.nextElementSibling
     if (letzte.tagName === 'FIGURE' && !letzte.querySelector('figcaption') && naechster?.tagName === 'P') {
@@ -195,6 +236,21 @@ function bilderMitBeschriftung(wurzel: HTMLElement) {
       }
     }
     p.replaceWith(...neu)
+  }
+
+  // Enge Listen: der Text steht ohne <p> im Listenpunkt, bis zur ersten Unterliste o. Ä.
+  for (const li of [...wurzel.querySelectorAll<HTMLElement>('li')]) {
+    if (li.closest('td, th, .einbettung-inhalt')) continue
+    const lose: Node[] = []
+    for (const n of li.childNodes) {
+      if (n.nodeType === Node.ELEMENT_NODE && /^(P|UL|OL|TABLE|BLOCKQUOTE|DIV|PRE|FIGURE|SECTION)$/.test(n.nodeName)) break
+      lose.push(n)
+    }
+    const neu = zerlegen(lose, false)
+    if (!neu) continue
+    const danach = lose[lose.length - 1].nextSibling
+    for (const n of lose) if (n.parentNode === li) li.removeChild(n)
+    for (const n of neu) li.insertBefore(n, danach)
   }
 }
 

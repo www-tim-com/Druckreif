@@ -55,6 +55,35 @@ Eine Formel, die KaTeX nicht kennt, wird nie als Rohcode gedruckt: $\ce{CO2}$
 *Abb.: Kursive Zeile im selben Absatz wie ein weiteres Bild*
 ![[Atemwege.svg|120]]
 
+## Eingerückte Bilder und Tabellen
+
+- Bild unter einem Aufzählungspunkt:
+	![[Lunge.png|120]]
+- Bild als eigener Absatz im Punkt:
+
+	![[Atemwege.svg|100]]
+	*Abb.: Atemwege, eingerückt*
+- Tabelle im Punkt:
+
+	| Wert | Norm |
+	| --- | --- |
+	| AF | 12–20 /min |
+	| SpO₂ | ≥ 95 % |
+
+1. Nummerierter Punkt
+	1. Tiefer eingerückt mit Bild
+		![[Lunge.png|90]]
+
+> [!note] Bild und Tabelle im Callout
+> ![[Atemwege.svg|100]]
+>
+> | Gas | Anteil |
+> | --- | --- |
+> | O₂ | 21 % |
+
+> Zitat mit Bild
+> ![[Lunge.png|100]]
+
 ## Zwei Einbettungen in einem Absatz
 
 Nach dem Einfügen stehen beide in derselben Reihenfolge wie hier:

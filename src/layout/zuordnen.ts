@@ -121,6 +121,8 @@ export function layoutAnwenden(wurzel: HTMLElement, layout: LayoutDatei, bloecke
       // Bilder und Tabellen: Bezugsblock und „tiefer im Absatz“ beim Textumbruch
       const lage = el.tagName === 'TABLE' ? eintrag.table : eintrag.image
       if (lage?.wrap) {
+        // Eingerückt: der Listenpunkt (das Callout, Zitat) umschließt das schwebende Objekt
+        if (el.parentElement?.closest('[data-block]')) el.parentElement.classList.add('umfluss-huelle')
         const melden = (text: string) => hinweise.push({ stufe: 'gelb', notiz: notizPfad, text: `${text}: ${beschreibung}`, layoutEintrag: i, art: 'zuordnung', block })
         if (lage.before) bildVersetzen(wurzel, el, lage.before, bloecke, melden)
         if (lage.offsetYMm && lage.offsetYMm > 0) umflussAbstand(el, lage.offsetYMm)

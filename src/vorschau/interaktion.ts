@@ -313,8 +313,10 @@ function verschieben(dok: Document, figure: HTMLElement, start: PointerEvent, ru
     const anteil = (img.left + img.width / 2 + dxMm * faktor - flaeche.left) / flaeche.width
     const id = figure.dataset.block!
     if (figure.classList.contains('umfliessen')) {
-      // Umfließend: linke oder rechte Hälfte, verankert am Block unter der neuen Oberkante; Text fließt neu herum
-      const bezug = bezugFinden(dok, id, img.top + dyMm * faktor)
+      // Umfließend: linke oder rechte Hälfte, verankert am Block unter der neuen Oberkante; Text fließt neu herum.
+      // Eingerückt (in Liste, Callout, Zitat): bleibt in seinem Block, nur Seite und Abstand ändern sich
+      const eingerueckt = !!figure.parentElement?.closest('[data-block]')
+      const bezug = eingerueckt ? null : bezugFinden(dok, id, img.top + dyMm * faktor)
       const ausrichtung: Ausrichtung = anteil < 1 / 2 ? 'left' : 'right'
       rueckrufe().bildVerschieben(id, ausrichtung, Math.round(dyMm), bezug ? { block: bezug.block, versatzMm: bezug.versatzPx / faktor } : undefined)
       return
