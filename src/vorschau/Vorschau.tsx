@@ -247,30 +247,19 @@ export function Vorschau(p: Props) {
       return '<!doctype html>' + kopie.outerHTML
     },
     seitenMessen(anpassen) {
-      return new Promise((fertig, fehler) => {
-        const messung = document.createElement('iframe')
-        messung.className = 'messung'
-        messung.setAttribute('aria-hidden', 'true')
-        const ende = (ergebnis: () => void) => {
-          window.removeEventListener('message', empfangen)
-          clearTimeout(zeit)
-          messung.remove()
-          ergebnis()
-        }
-        const empfangen = (e: MessageEvent) => {
-          if (e.data?.druckreif !== 'fertig' || e.source !== messung.contentWindow) return
-          const seiten = messung.contentDocument?.querySelectorAll('.pagedjs_page').length ?? 0
-          ende(() => fertig(seiten))
-        }
-        const zeit = setTimeout(() => ende(() => fehler(new Error('Messen dauert zu lange'))), 60_000)
-        window.addEventListener('message', empfangen)
-        const a = aktuell.current
-        const kopie = document.createElement('template')
-        kopie.innerHTML = a.html
-        anpassen(kopie.content)
-        messung.srcdoc = seiteBauen(kopie.innerHTML, a.vaultCss, a.titel, -1, a.tinteSparen)
-        flaeche.current!.append(messung)
-      })
+      const a = aktuell.current
+      const kopie = document.createElement('template')
+      kopie.innerHTML = a.html
+      anpassen(kopie.content)
+      // Im Setzer messen: Paged.js, Schriften und CSS sind dort schon geladen (ein neues iframe lädt alles neu)
+      const fertigerSetzer = setzer.current?.css === cssSchluessel(a.vaultCss, a.tinteSparen) ? setzer.current.fenster : null
+      if (!fertigerSetzer) return seitenMessenNeu(kopie.innerHTML, a)
+      const lauf = setzKette.current.then(() => seitenZaehlen(fertigerSetzer, kopie.innerHTML, pagedStile(a.vaultCss)))
+      setzKette.current = lauf.then(
+        () => {},
+        () => {},
+      )
+      return lauf
     },
     zoomFuer(art) {
       const dok = aktivesFenster()?.contentDocument
@@ -329,6 +318,30 @@ export function Vorschau(p: Props) {
       return aktivesFenster()?.contentWindow ?? null
     },
   }))
+
+  /** Messen in einem eigenen, neu geladenen iframe – solange der Setzer noch nicht bereit ist */
+  function seitenMessenNeu(html: string, a: Props): Promise<number> {
+    return new Promise((fertig, fehler) => {
+      const messung = document.createElement('iframe')
+      messung.className = 'messung'
+      messung.setAttribute('aria-hidden', 'true')
+      const ende = (ergebnis: () => void) => {
+        window.removeEventListener('message', empfangen)
+        clearTimeout(zeit)
+        messung.remove()
+        ergebnis()
+      }
+      const empfangen = (e: MessageEvent) => {
+        if (e.data?.druckreif !== 'fertig' || e.source !== messung.contentWindow) return
+        const seiten = messung.contentDocument?.querySelectorAll('.pagedjs_page').length ?? 0
+        ende(() => fertig(seiten))
+      }
+      const zeit = setTimeout(() => ende(() => fehler(new Error('Messen dauert zu lange'))), 60_000)
+      window.addEventListener('message', empfangen)
+      messung.srcdoc = seiteBauen(html, a.vaultCss, a.titel, -1, a.tinteSparen)
+      flaeche.current!.append(messung)
+    })
+  }
 
   // Seiten der sichtbaren Fassung je Gruppe (unberührt, vor Auswahl, Markierungen und Suche kopiert)
   const vorrat = useRef<{ css: string; gruppen: Gruppe[] } | null>(null)
@@ -679,6 +692,28 @@ function seitenEinsetzen(flaeche: HTMLElement, alle: HTMLElement[]): number {
     flaeche.style.setProperty('--pagedjs-page-count', String(alle.length))
   }
   return gleich
+}
+
+/** Ganzen Inhalt im Setzer umbrechen und die Seiten zählen (automatisch formatieren) */
+async function seitenZaehlen(fenster: PagedFenster, html: string, stile: string[]): Promise<number> {
+  const dok = fenster.document
+  const ziel = dok.createElement('div')
+  dok.body.append(ziel)
+  // wie seiteBauen: die Hülle gehört zum Inhalt
+  const huelle = dok.createElement('div')
+  huelle.className = 'print markdown-reading-view'
+  huelle.innerHTML = html
+  const inhalt = dok.createDocumentFragment()
+  inhalt.append(huelle)
+  const vorschau = new fenster.Paged.Previewer()
+  vorschau.chunker.q.tick = fenster.druckreifTakt
+  try {
+    await vorschau.preview(inhalt, stile.map((css) => ({ [fenster.location.href]: css })), ziel)
+    return ziel.querySelectorAll('.pagedjs_pages > .pagedjs_page').length
+  } finally {
+    vorschau.polisher.destroy()
+    ziel.remove()
+  }
 }
 
 /** CSS, das Paged.js aus den Stylesheets erzeugt hat – gleich, wenn nichts davon vom Inhalt abhängt */

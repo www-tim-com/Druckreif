@@ -13,6 +13,8 @@ export interface Vault {
   geaendertAm(pfad: string): Promise<number>
   /** Dateiliste neu einlesen (neue, verschobene, gelöschte Dateien) */
   aktualisieren(): Promise<void>
+  /** Meldet Änderungen im Ordner, sobald der Browser sie sieht (falls er das kann); liefert die Abmeldung */
+  beobachten?(geaendert: () => void): () => void
 }
 
 export const BILD_ENDUNGEN = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']

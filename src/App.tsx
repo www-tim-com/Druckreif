@@ -2,7 +2,7 @@
 // Die eigentliche Arbeit steckt in dokument/, layout/, markdown/ und vault/ – hier nur Zustand und Verdrahtung.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { type Dokument, type NotizTeil, bilderVergessen, dokumentAufbauen, stempel } from './dokument/aufbauen'
+import { type Dokument, bilderVergessen, dokumentAufbauen, stempel } from './dokument/aufbauen'
 import type { Block } from './dokument/bloecke'
 import type { Hinweis } from './hinweise'
 import {
@@ -27,11 +27,10 @@ import {
   umbruchUmschalten,
   umflussPosition,
 } from './layout/bearbeiten'
-import { type LayoutDatei, type LayoutEintrag, STANDARD_SCHRIFT_PT, layoutSpeichern } from './layout/layoutDatei'
+import { type LayoutDatei, type LayoutEintrag, STANDARD_SCHRIFT_PT } from './layout/layoutDatei'
 import { blockFinden, typName } from './layout/zuordnen'
 import {
   type Mappe,
-  type MappenDatei,
   type MappenEintrag,
   ausblendRegel,
   ausblendRegelSetzen,
@@ -42,7 +41,6 @@ import {
   mappeLoeschen,
   mappeZuruecksetzen,
   mappenLaden,
-  mappenSpeichern,
   neueMappe,
   notizAnhaengen,
   tinteSparenSetzen,
@@ -102,6 +100,8 @@ import { type Vault, notizName } from './vault/vault'
 import type { Rueckrufe } from './vorschau/interaktion'
 import { type Fertig, type Statistik, Vorschau, type VorschauSteuerung } from './vorschau/Vorschau'
 import { type Leerraum, leerraumText } from './vorschau/leerraum'
+import { type LayoutAenderung, useLayoutVerlauf } from './zustand/useLayoutVerlauf'
+import { useMappen } from './zustand/useMappen'
 import type { Treffer } from './vorschau/suche'
 
 interface Geladen {
@@ -110,14 +110,6 @@ interface Geladen {
   notizen: Notiz[]
   hinweise: Hinweis[]
 }
-
-/** Ein Schritt für Rückgängig/Wiederholen: Layout einer oder mehrerer Notizen und/oder eine Mappe, vorher und nachher. */
-interface Schritt {
-  layouts: { pfad: string; vorher: LayoutDatei; nachher: LayoutDatei }[]
-  mappe?: { id: string; vorher: Mappe; nachher: Mappe }
-}
-
-type LayoutAenderung = { pfad: string; aendern: (l: LayoutDatei) => LayoutDatei }
 
 /** Stufen für „Automatisch formatieren“: Grundschrift (pt) und Zeilenabstand, von groß nach klein */
 const STUFEN: [number, number][] = [
@@ -134,8 +126,6 @@ const STUFEN: [number, number][] = [
 
 type Aendern = (e: LayoutEintrag) => LayoutEintrag
 
-const MAX_VERLAUF = 100
-
 /** Vorschläge der Befehlssuche bei leerem Feld (nach den zuletzt benutzten) */
 const VORSCHLAEGE = ['drucken', 'formatieren', 'umbruch', 'ausblenden', 'woerter', 'tasten']
 
@@ -151,10 +141,6 @@ export function App() {
   const [statistik, setStatistik] = useState<Statistik | null>(null)
   const [woerter, setWoerter] = useState<number | null>(null)
   const [zuletzt, setZuletzt] = useState<string[]>(() => listeLesen(speicherLesen('befehle')))
-  // Mappen: alle Zusammenstellungen des Vaults, die offenen Reiter und der aktive
-  const [mappen, setMappen] = useState<MappenDatei>({ version: 1, mappen: [] })
-  const [offen, setOffen] = useState<string[]>([])
-  const [aktivId, setAktivId] = useState<string | null>(null)
   const [navAnsicht, setNavAnsicht] = useState<NavAnsicht>('notizen')
   const [dokument, setDokument] = useState<Dokument | null>(null)
   const [baut, setBaut] = useState(false)
@@ -170,8 +156,6 @@ export function App() {
   const [kontext, setKontext] = useState<{ id: string; x: number; y: number } | null>(null)
   // Roter Eintrag, der gerade einem Block zugewiesen wird – per Anker (JSON), weil sich Indizes verschieben können
   const [zuweisen, setZuweisen] = useState<{ notiz: string; anker: string } | null>(null)
-  const [verlauf, setVerlauf] = useState<{ zurueck: Schritt[]; vor: Schritt[] }>({ zurueck: [], vor: [] })
-  const [speichert, setSpeichert] = useState(0)
   const [fehler, setFehler] = useState<string | null>(null)
   const [bildIstMm, setBildIstMm] = useState<number | null>(null)
   const [leerraum, setLeerraum] = useState<Leerraum[]>([])
@@ -186,9 +170,18 @@ export function App() {
   const vorschau = useRef<VorschauSteuerung>(null)
   const zugriffstasten = useRef<ZugriffstastenSteuerung>(null)
 
-  // Neuester Stand jeder Layout-Datei – schneller als das neu aufgebaute Dokument, damit schnelle Folgeänderungen nichts verlieren
-  const layouts = useRef(new Map<string, LayoutDatei>())
-  const [layoutStand, setLayoutStand] = useState(0)
+  // Mappen (Reiter, aktive Mappe) sowie Layout ändern, speichern und Rückgängig: zustand/
+  const mappenZustand = useMappen(geladen?.vault ?? null, versuchen, setFehler)
+  const { mappen, offen, setOffen, aktivId, setAktivId, aktive: aktiveMappe } = mappenZustand
+  const verlauf = useLayoutVerlauf({
+    vault: geladen?.vault ?? null,
+    dokument,
+    mappen: mappenZustand,
+    fehler: setFehler,
+    versuchen,
+    neuAufbauen: () => setStand((s) => s + 1),
+  })
+  const { layoutVon, layoutGesperrt, layoutAendern, hinweisEintragAendern, schrittAusfuehren, zurueck, vor, blockSuchen } = verlauf
 
   const setZoom = (z: number) => setZoomRoh(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10)))
   const zoomAendern = (schritt: number) => setZoomRoh((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + schritt) * 10) / 10)))
@@ -247,18 +240,8 @@ export function App() {
       notizenLaden(vault),
       mappenLaden(vault).catch((e: Error) => e),
     ])
-    let mappenDatei: MappenDatei
-    if (mappenGelesen instanceof Error) {
-      // Beschädigte mappen.json nie überschreiben (wie Layout-Dateien): bisherige Mappen weiter zeigen, Änderungen sperren
-      mappenGesperrt.current = `${mappenGelesen.message} – Mappen lassen sich nicht ändern, bis die Datei repariert ist (dann Aktualisieren, F5).`
-      hinweise.push({ stufe: 'rot', notiz: '', text: mappenGesperrt.current })
-      mappenDatei = geladen?.vault === vault ? mappenRef.current : { version: 1, mappen: [] }
-    } else {
-      mappenGesperrt.current = null
-      mappenDatei = mappenGelesen
-    }
-    mappenRef.current = mappenDatei
-    setMappen(mappenDatei)
+    const { datei: mappenDatei, fehler: mappenFehler } = mappenZustand.uebernehmen(mappenGelesen, geladen?.vault === vault)
+    if (mappenFehler) hinweise.push({ stufe: 'rot', notiz: '', text: mappenFehler })
     setGeladen({ vault, einstellungen, notizen, hinweise })
     return { notizen, mappenDatei }
   }
@@ -266,9 +249,8 @@ export function App() {
   async function vaultSetzen(vault: Vault) {
     // Blob-URLs der Bilder des bisherigen Vaults freigeben
     if (geladen && geladen.vault !== vault) bilderVergessen(geladen.vault)
-    kaputteLayouts.current.clear()
+    verlauf.zuruecksetzen()
     let { mappenDatei } = await vaultLesen(vault)
-    setVerlauf({ zurueck: [], vor: [] })
     setAuswahl(null)
     setDateiOffen(false)
     // Übernahme der früheren Druckliste als erste Mappe
@@ -276,7 +258,7 @@ export function App() {
     if (mappenDatei.mappen.length === 0 && alteListe.length > 0) {
       const neu = neueMappe(mappenDatei, 'Dokument', alteListe)
       mappenDatei = neu.datei
-      await mappenSchreiben(vault, mappenDatei)
+      await mappenZustand.schreiben(vault, mappenDatei)
     }
     const ids = mappenDatei.mappen.map((m) => m.id)
     const warOffen = listeLesen(speicherLesen(`offen:${vault.name}`)).filter((id) => ids.includes(id))
@@ -301,35 +283,9 @@ export function App() {
 
   // ---- Mappen ----
 
-  const mappenRef = useRef(mappen)
-  /** Fehlertext, solange .lernzettel/mappen.json beschädigt ist (dann wird sie nie geschrieben) */
-  const mappenGesperrt = useRef<string | null>(null)
-  const aktiveMappe = mappen.mappen.find((m) => m.id === aktivId) ?? null
-
-  async function mappenSchreiben(vault: Vault, datei: MappenDatei) {
-    if (mappenGesperrt.current) {
-      setFehler(mappenGesperrt.current)
-      return
-    }
-    mappenRef.current = datei
-    setMappen(datei)
-    await mappenSpeichern(vault, datei)
-  }
-
-  function mappenAendern(aendern: (d: MappenDatei) => MappenDatei) {
-    if (!geladen) return
-    const neu = aendern(mappenRef.current)
-    versuchen(() => mappenSchreiben(geladen.vault, neu))
-  }
-
   /** Inhalt der aktiven Mappe ändern (Notizen, Reihenfolge, Anschließen, Tinte sparen …) – mit Rückgängig. */
   function aktiveMappeAendern(aendern: (m: Mappe) => Mappe) {
     schrittAusfuehren([], aendern)
-  }
-
-  /** Mappe ohne neuen Rückgängig-Schritt setzen (für Rückgängig/Wiederholen selbst). Umbenennen ist kein Schritt – der Name bleibt. */
-  function mappeSetzen(id: string, mappe: Mappe) {
-    mappenAendern((d) => mappeAendern(d, id, (aktuell) => ({ ...mappe, name: aktuell.name })))
   }
 
   function mappeOeffnen(id: string) {
@@ -341,17 +297,11 @@ export function App() {
 
   function neueMappeAnlegen(notizen: string[] = []) {
     const name = notizen.length === 1 ? notizName(notizen[0]) : 'Neue Mappe'
-    const neu = neueMappe(mappenRef.current, name, notizen)
-    mappenAendern(() => neu.datei)
+    const neu = neueMappe(mappenZustand.ref.current, name, notizen)
+    mappenZustand.aendern(() => neu.datei)
     mappeOeffnen(neu.id)
     // Leere Mappe: gleich die Notizliste zeigen, damit man etwas hinzufügen kann; sonst Ansicht lassen
     if (notizen.length === 0) setNavAnsicht('notizen')
-  }
-
-  function reiterSchliessen(id: string) {
-    const rest = offen.filter((o) => o !== id)
-    setOffen(rest)
-    if (aktivId === id) setAktivId(rest[Math.max(0, offen.indexOf(id) - 1)] ?? null)
   }
 
   /** Klick auf eine Notiz im Baum: an die aktive Mappe hängen (oder hinspringen, wenn sie schon drinsteht). */
@@ -400,19 +350,11 @@ export function App() {
     let abgebrochen = false
     setBaut(true)
     versuchen(async () => {
-      const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, ausstehend.current, aktiveMappe.hideSections)
+      const dok = await dokumentAufbauen(geladen.vault, aktiveMappe.items, geladen.einstellungen, aktiveMappe.name, verlauf.ausstehend.current, aktiveMappe.hideSections)
       if (abgebrochen) return
-      for (const n of dok.notizen) {
-        if (n.layoutKaputt) kaputteLayouts.current.add(n.pfad)
-        else kaputteLayouts.current.delete(n.pfad)
-      }
+      verlauf.dokumentUebernehmen(dok)
       setDokument(dok)
       setBaut(false)
-      // Während gespeichert wird, ist layouts.current neuer als das Dokument (layoutSchreiben setzt es vorher)
-      if (speichertRef.current === 0) {
-        layouts.current = new Map(dok.notizen.map((n) => [n.pfad, n.layout]))
-        setLayoutStand((s) => s + 1)
-      }
     })
     return () => {
       abgebrochen = true
@@ -422,14 +364,15 @@ export function App() {
 
   // Neu laden, wenn eine Notiz oder ein Bild in Obsidian geändert wurde. Verglichen wird mit dem Stand beim
   // Aufbau, damit auch ein Speichern während des Aufbaus auffällt. Die Dateiliste wird mit eingelesen:
-  // ein neu eingefügtes Bild („Pasted image …“) gibt es sonst noch nicht.
+  // ein neu eingefügtes Bild („Pasted image …“) gibt es sonst noch nicht. Meldet der Browser Änderungen im Ordner
+  // (FileSystemObserver), wird sofort geprüft; die regelmäßige Prüfung bleibt als Rückfall.
   useEffect(() => {
     if (!geladen || !dokument) return
     const bekannt = new Map(dokument.quellen)
     let laeuft = false
-    const timer = setInterval(async () => {
+    async function pruefen() {
       // Fenster minimiert oder anderer Tab: nicht auf die Platte zugreifen, die nächste Runde danach holt es nach
-      if (laeuft || document.hidden) return
+      if (laeuft || document.hidden || !geladen) return
       laeuft = true
       try {
         const pfade = [...bekannt.keys()]
@@ -444,8 +387,13 @@ export function App() {
       } finally {
         laeuft = false
       }
-    }, 1500)
-    return () => clearInterval(timer)
+    }
+    const timer = setInterval(pruefen, 1500)
+    const beenden = geladen.vault.beobachten?.(pruefen)
+    return () => {
+      clearInterval(timer)
+      beenden?.()
+    }
   }, [geladen, dokument])
 
   // Ergebnis des automatischen Formatierens eine Weile in der Statusleiste zeigen
@@ -467,114 +415,6 @@ export function App() {
   useEffect(() => {
     if (auswahl && dokument && !dokument.notizen.some((n) => n.bloecke.some((b) => b.id === auswahl))) setAuswahl(null)
   }, [dokument, auswahl])
-
-  // ---- Layout ändern, speichern, Rückgängig ----
-
-  const speichertRef = useRef(0)
-  /** Notizen mit beschädigter Layout-Datei – auch aus anderen Mappen (Rückgängig kann sie sonst überschreiben) */
-  const kaputteLayouts = useRef(new Set<string>())
-
-  /** Layouts, deren Datei gerade geschrieben wird: der Neuaufbau beginnt sofort damit, statt aufs Speichern zu warten */
-  const ausstehend = useRef(new Map<string, LayoutDatei>())
-
-  async function layoutSchreiben(layout: LayoutDatei) {
-    if (!geladen) return
-    layouts.current.set(layout.note, layout)
-    setLayoutStand((s) => s + 1)
-    speichertRef.current++
-    setSpeichert(speichertRef.current)
-    ausstehend.current.set(layout.note, layout)
-    setStand((s) => s + 1)
-    let gespeichert = false
-    try {
-      await layoutSpeichern(geladen.vault, layout)
-      gespeichert = true
-    } finally {
-      if (ausstehend.current.get(layout.note) === layout) ausstehend.current.delete(layout.note)
-      speichertRef.current--
-      setSpeichert(speichertRef.current)
-      // Gespeichert: das Dokument zeigt diesen Stand schon (ein zweiter Aufbau aus der Datei ergäbe dasselbe).
-      // Fehlgeschlagen: aus der Datei neu aufbauen, damit die Ansicht zeigt, was wirklich gespeichert ist.
-      if (!gespeichert) setStand((s) => s + 1)
-    }
-  }
-
-  function layoutVon(teil: NotizTeil): LayoutDatei {
-    return layouts.current.get(teil.pfad) ?? teil.layout
-  }
-
-  /** Beschädigte Layout-Datei nie überschreiben – sonst wären alle bisherigen Einträge darin verloren. */
-  function layoutGesperrt(pfad: string): boolean {
-    if (!kaputteLayouts.current.has(pfad)) return false
-    const titel = dokument?.notizen.find((n) => n.pfad === pfad)?.titel ?? notizName(pfad)
-    setFehler(`Die Layout-Datei von „${titel}“ ist beschädigt. Bitte reparieren oder löschen, dann Aktualisieren (F5).`)
-    return true
-  }
-
-  function layoutAendern(pfad: string, aendern: (l: LayoutDatei) => LayoutDatei) {
-    schrittAusfuehren([{ pfad, aendern }])
-  }
-
-  /**
-   * Eintrag aus einem Hinweis ändern. Der Index im Hinweis stammt aus dem zuletzt aufgebauten Dokument; im neuesten
-   * Layout kann er schon verschoben sein (schnelles Klicken) – deshalb über den Anker wiederfinden.
-   */
-  function hinweisEintragAendern(notiz: string, index: number, aendern: (l: LayoutDatei, index: number) => LayoutDatei) {
-    const anker = dokument?.notizen.find((n) => n.pfad === notiz)?.layout.items[index]?.anchor
-    if (!anker) return
-    const gesucht = JSON.stringify(anker)
-    layoutAendern(notiz, (l) => {
-      const i = l.items.findIndex((e) => JSON.stringify(e.anchor) === gesucht)
-      return i < 0 ? l : aendern(l, i)
-    })
-  }
-
-  /**
-   * Layouts mehrerer Notizen und/oder die aktive Mappe ändern – zusammen ein Schritt für Rückgängig.
-   * Liefert false, wenn nichts zu ändern war.
-   */
-  function schrittAusfuehren(aenderungen: LayoutAenderung[], mappeNeu?: (m: Mappe) => Mappe): boolean {
-    const schritt: Schritt = { layouts: [] }
-    for (const { pfad, aendern } of aenderungen) {
-      const teil = dokument?.notizen.find((n) => n.pfad === pfad)
-      if (!teil || layoutGesperrt(pfad)) return false
-      const vorher = layoutVon(teil)
-      const nachher = aendern(vorher)
-      if (JSON.stringify(vorher) !== JSON.stringify(nachher)) schritt.layouts.push({ pfad, vorher, nachher })
-    }
-    const mappeVorher = mappenRef.current.mappen.find((m) => m.id === aktivId)
-    if (mappeNeu && mappenGesperrt.current) {
-      setFehler(mappenGesperrt.current)
-      return false
-    }
-    if (mappeNeu && mappeVorher) {
-      const nachher = mappeNeu(mappeVorher)
-      if (JSON.stringify(mappeVorher) !== JSON.stringify(nachher)) schritt.mappe = { id: mappeVorher.id, vorher: mappeVorher, nachher }
-    }
-    if (schritt.layouts.length === 0 && !schritt.mappe) return false
-    setVerlauf((v) => ({ zurueck: [...v.zurueck.slice(-MAX_VERLAUF + 1), schritt], vor: [] }))
-    anwenden(schritt, 'nachher')
-    return true
-  }
-
-  function anwenden(schritt: Schritt, stand: 'vorher' | 'nachher') {
-    if (schritt.mappe) mappeSetzen(schritt.mappe.id, schritt.mappe[stand])
-    if (schritt.layouts.length > 0) versuchen(() => Promise.all(schritt.layouts.map((a) => layoutSchreiben(a[stand]))).then(() => {}))
-  }
-
-  function zurueck() {
-    const schritt = verlauf.zurueck.at(-1)
-    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
-    setVerlauf((v) => ({ zurueck: v.zurueck.slice(0, -1), vor: [...v.vor, schritt] }))
-    anwenden(schritt, 'vorher')
-  }
-
-  function vor() {
-    const schritt = verlauf.vor.at(-1)
-    if (!schritt || schritt.layouts.some((a) => layoutGesperrt(a.pfad))) return
-    setVerlauf((v) => ({ zurueck: [...v.zurueck, schritt], vor: v.vor.slice(0, -1) }))
-    anwenden(schritt, 'nachher')
-  }
 
   /** Seite des gewählten Blocks, sonst die gerade sichtbare */
   function aktuelleSeite(): number {
@@ -715,34 +555,6 @@ export function App() {
     }
   }
 
-  // Block-ID -> Index des ersten passenden Layout-Eintrags, je Notiz und Layout-Stand einmal zugeordnet:
-  // blockSuchen läuft bei jedem Zeichnen oft (Gliederung: für jede Überschrift)
-  const eintragIndexe = useRef(new WeakMap<NotizTeil, { layout: LayoutDatei; ids: Map<string, number> }>())
-
-  function eintragIndex(teil: NotizTeil): Map<string, number> {
-    const layout = layoutVon(teil)
-    const alt = eintragIndexe.current.get(teil)
-    if (alt?.layout === layout) return alt.ids
-    const ids = new Map<string, number>()
-    layout.items.forEach((e, i) => {
-      const id = blockFinden(e.anchor, teil.bloecke)?.block.id
-      if (id !== undefined && !ids.has(id)) ids.set(id, i)
-    })
-    eintragIndexe.current.set(teil, { layout, ids })
-    return ids
-  }
-
-  /** Block per ID finden, mit seiner Notiz und dem aktuellen Layout-Eintrag. */
-  function blockSuchen(id: string | null): { teil: NotizTeil; block: Block; index: number | undefined } | null {
-    if (!id || !dokument) return null
-    for (const teil of dokument.notizen) {
-      const block = teil.bloecke.find((b) => b.id === id)
-      if (!block) continue
-      return { teil, block, index: eintragIndex(teil).get(id) }
-    }
-    return null
-  }
-
   function blockAendern(id: string | null, aendern: Aendern) {
     const b = blockSuchen(id)
     if (b) layoutAendern(b.teil.pfad, (l) => eintragAendern(l, b.block, b.index, aendern))
@@ -756,7 +568,7 @@ export function App() {
     const beschreibung = b.block.typ === 'heading' ? `Überschrift „${ort}“` : `${typName(b.block.typ)} in „${ort}“`
     return { ...b, eintrag, beschreibung }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auswahl, dokument, layoutStand])
+  }, [auswahl, dokument, verlauf.layoutStand])
 
   const aktuelleNotiz = gewaehlt?.teil ?? dokument?.notizen[0] ?? null
 
@@ -911,8 +723,8 @@ export function App() {
         mappen={mappen.mappen}
         onMappeOeffnen={mappeOeffnen}
         onMappeLoeschen={(id) => {
-          reiterSchliessen(id)
-          mappenAendern((d) => mappeLoeschen(d, id))
+          mappenZustand.reiterSchliessen(id)
+          mappenZustand.aendern((d) => mappeLoeschen(d, id))
         }}
       />
     )
@@ -947,8 +759,8 @@ export function App() {
   const ohneDok = !dokument
   const befehle: Befehl[] = [
     { id: 'drucken', text: 'Drucken / als PDF speichern', symbol: Printer, ort: 'Datei', taste: 'Strg+P', aktion: drucken, gesperrt: ohneDok, stichworte: 'pdf export' },
-    { id: 'zurueck', text: 'Rückgängig', symbol: Undo2, ort: 'Start', taste: 'Strg+Z', aktion: zurueck, gesperrt: verlauf.zurueck.length === 0 },
-    { id: 'vor', text: 'Wiederholen', symbol: Redo2, ort: 'Start', taste: 'Strg+Y', aktion: vor, gesperrt: verlauf.vor.length === 0 },
+    { id: 'zurueck', text: 'Rückgängig', symbol: Undo2, ort: 'Start', taste: 'Strg+Z', aktion: zurueck, gesperrt: !verlauf.kannZurueck },
+    { id: 'vor', text: 'Wiederholen', symbol: Redo2, ort: 'Start', taste: 'Strg+Y', aktion: vor, gesperrt: !verlauf.kannVor },
     { id: 'umbruch', text: 'Seitenumbruch vor dem Block', symbol: SeparatorHorizontal, ort: 'Layout', taste: 'Strg+Enter', aktion: () => blockAendern(auswahl, umbruchUmschalten(true)), gesperrt: !gewaehlt, stichworte: 'neue seite' },
     { id: 'ausblenden', text: 'Block im Druck ausblenden', symbol: EyeOff, ort: 'Start', taste: 'Entf', aktion: () => sichtbarkeitSetzen(auswahl!, true), gesperrt: !gewaehlt, stichworte: 'verstecken entfernen weglassen' },
     { id: 'abschnitte-ausblenden', text: 'Suchen und Ausblenden', symbol: SearchX, ort: 'Start', aktion: () => setDialog('ausblenden'), gesperrt: ohneDok || !aktiveMappe, stichworte: 'abschnitt überschrift quellen literatur regel verstecken' },
@@ -983,12 +795,12 @@ export function App() {
       <div className="kopf">
         <Titelleiste
           titel={aktiveMappe?.name ?? geladen.vault.name}
-          onUmbenennen={aktiveMappe ? (name) => mappenAendern((d) => mappeAendern(d, aktiveMappe.id, umbenennen(name))) : null}
+          onUmbenennen={aktiveMappe ? (name) => mappenZustand.aendern((d) => mappeAendern(d, aktiveMappe.id, umbenennen(name))) : null}
           vaultName={geladen.vault.name}
-          speichert={speichert > 0}
+          speichert={verlauf.speichert}
           schnellzugriff={oberflaeche.schnellzugriff}
-          kannZurueck={verlauf.zurueck.length > 0}
-          kannVor={verlauf.vor.length > 0}
+          kannZurueck={verlauf.kannZurueck}
+          kannVor={verlauf.kannVor}
           zurueck={zurueck}
           vor={vor}
           drucken={drucken}
@@ -1012,8 +824,8 @@ export function App() {
           reiter={reiter}
           onReiter={setReiter}
           onDatei={() => dateiOeffnen()}
-          kannZurueck={verlauf.zurueck.length > 0}
-          kannVor={verlauf.vor.length > 0}
+          kannZurueck={verlauf.kannZurueck}
+          kannVor={verlauf.kannVor}
           zurueck={zurueck}
           vor={vor}
           drucken={drucken}
@@ -1112,9 +924,9 @@ export function App() {
           mappen={offeneMappen}
           aktiv={aktivId}
           onWaehlen={mappeOeffnen}
-          onSchliessen={reiterSchliessen}
+          onSchliessen={mappenZustand.reiterSchliessen}
           onNeu={() => neueMappeAnlegen()}
-          onUmbenennen={(id, name) => mappenAendern((d) => mappeAendern(d, id, umbenennen(name)))}
+          onUmbenennen={(id, name) => mappenZustand.aendern((d) => mappeAendern(d, id, umbenennen(name)))}
         />
         {vollbild && !kopfOffen && (
           <button className="kopf-zeigen" onClick={() => setKopfOffen(true)} aria-label="Menüband anzeigen" title="Menüband anzeigen">

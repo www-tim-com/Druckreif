@@ -5,6 +5,16 @@ import { holen, merken } from './speicher'
 
 const SCHLUESSEL = 'vault'
 
+// Neuere Chrome/Edge; noch nicht in den TypeScript-Typen
+declare global {
+  interface Window {
+    FileSystemObserver?: new (rueckruf: () => void) => {
+      observe(handle: FileSystemHandle, optionen: { recursive: boolean }): Promise<void>
+      disconnect(): void
+    }
+  }
+}
+
 export function ordnerZugriffMoeglich(): boolean {
   return 'showDirectoryPicker' in window
 }
@@ -69,6 +79,13 @@ async function ordnerLaden(stamm: FileSystemDirectoryHandle): Promise<Vault> {
       for (const pfad of angelegt) if (!neu.has(pfad)) neu.set(pfad, dateien.get(pfad)!)
       dateien = neu
       vault.dateien = sortiert()
+    },
+    beobachten(geaendert) {
+      if (!window.FileSystemObserver) return () => {}
+      const beobachter = new window.FileSystemObserver(() => geaendert())
+      // Nicht unterstützt (ältere Fassung, Ordnerart): dann bleibt es bei der regelmäßigen Prüfung
+      beobachter.observe(stamm, { recursive: true }).catch(() => beobachter.disconnect())
+      return () => beobachter.disconnect()
     },
     schreibenText(pfad, text) {
       const vorher = schreibKette.get(pfad) ?? Promise.resolve()
